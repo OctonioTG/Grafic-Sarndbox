@@ -1,5 +1,7 @@
 # Pruebas en la computadora del sandbox
 
+*English version: [ON_SITE_TESTING.md](ON_SITE_TESTING.md)*
+
 Lista paso a paso para el día de las pruebas. Marquen cada casilla `[ ]` → `[x]` y anoten lo que encuentren en la columna de notas o al final.
 
 **Tiempo estimado:** 1 a 2 horas.

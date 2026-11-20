@@ -1,5 +1,7 @@
 # AR Sandbox + Panel de análisis del relieve
 
+*English version: [README_EN.md](README_EN.md)*
+
 Con un **doble clic** en el ícono "AR Sandbox":
 
 1. Se revisa que esté todo lo necesario.
