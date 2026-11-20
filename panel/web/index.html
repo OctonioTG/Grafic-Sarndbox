@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sandbox · Análisis de terreno</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230e6b5c'/%3E%3Cpath d='M5 22c4-1 5-8 9-8s4 6 7 6 4-4 6-5' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="marca">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M5 22c4-1 5-8 9-8s4 6 7 6 4-4 6-5"/><path d="M5 26c4-.5 6-4 10-4s5 3 8 3 3-1.5 4-2" opacity=".55"/></svg>
+      <div>
+        <div class="marca-titulo">Sandbox Terreno</div>
+        <div class="marca-sub">Análisis geológico en vivo</div>
+      </div>
+    </div>
+    <div class="barra-acciones">
+      <div class="estado" id="estado" data-tipo="conectando"><span class="punto"></span><span id="estado-texto">Conectando…</span></div>
+      <button class="btn btn-sec" id="btn-conectar" title="Ver desde otra computadora o celular">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM14 18h2M18 14h3"/></svg>
+        <span>Conectar dispositivo</span>
+      </button>
+      <a class="btn btn-pri" id="btn-descargar" href="#" download aria-disabled="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+        <span>Descargar datos</span>
+      </a>
+    </div>
+  </header>
+
+  <div class="app">
+    <aside class="historial" aria-label="Historial de capturas">
+      <div class="historial-cab">
+        <h2>Capturas</h2>
+        <label class="interruptor" title="Mostrar automáticamente cada captura nueva">
+          <input type="checkbox" id="seguir" checked>
+          <span class="interruptor-pista"><span class="interruptor-bola"></span></span>
+          <span>Seguir en vivo</span>
+        </label>
+      </div>
+      <ol class="historial-lista" id="historial"></ol>
+    </aside>
+
+    <main class="contenido" id="contenido">
+      <!-- Estado vacío -->
+      <section class="vacio" id="vacio" hidden>
+        <div class="vacio-ilustracion" aria-hidden="true">
+          <svg viewBox="0 0 220 120"><path d="M10 95c30-4 38-50 70-50s34 38 58 38 30-22 72-26" class="v1"/><path d="M10 108c34-3 46-24 78-24s38 18 60 18 36-10 62-12" class="v2"/><circle cx="80" cy="45" r="4" class="v3"/></svg>
+        </div>
+        <h1>Esperando la primera captura</h1>
+        <p>El panel se actualiza solo en cuanto el SARndbox guarde el relieve.</p>
+        <ol class="pasos">
+          <li><b>Moldea</b> el terreno en la arena.</li>
+          <li><b>Presiona la tecla</b> de guardado en el SARndbox.</li>
+          <li><b>Listo:</b> el análisis aparece aquí y en todos los dispositivos conectados.</li>
+        </ol>
+      </section>
+
+      <div id="panel" hidden>
+        <div class="cabecera">
+          <div>
+            <div class="cabecera-meta" id="cab-meta"></div>
+            <h1 id="cab-titulo">Captura</h1>
+          </div>
+          <div class="alertas" id="alertas"></div>
+        </div>
+
+        <section class="kpis" id="kpis"></section>
+
+        <!-- MAPA -->
+        <section class="tarjeta mapa-tarjeta">
+          <div class="mapa-zona">
+            <div class="capas-tabs" id="capas" role="tablist" aria-label="Capa del mapa"></div>
+            <div class="lienzo-cont" id="lienzo-cont">
+              <canvas id="lienzo"></canvas>
+              <div class="cargando" id="cargando-mapa"><span class="giro"></span>Cargando mapa…</div>
+              <div class="mapa-herr">
+                <button class="herr" id="z-mas" title="Acercar (rueda del mouse)">+</button>
+                <button class="herr" id="z-menos" title="Alejar">−</button>
+                <button class="herr" id="z-ajustar" title="Ajustar a la pantalla (doble clic)">
+                  <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+                <button class="herr activo" id="t-curvas" title="Curvas de nivel" aria-pressed="true">
+                  <svg viewBox="0 0 24 24"><path d="M3 17c4-1 4-9 9-9s5 7 9 6"/><path d="M3 21c5-1 6-5 9-5s5 4 9 4" opacity=".6"/></svg></button>
+                <button class="herr" id="t-pantalla" title="Pantalla completa">
+                  <svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></button>
+              </div>
+              <div class="escala-barra" id="escala-barra"><span></span><b></b></div>
+              <div class="mapa-norte" aria-hidden="true">N<svg viewBox="0 0 10 14"><path d="M5 0l5 14-5-4-5 4z"/></svg></div>
+            </div>
+          </div>
+          <div class="mapa-lado">
+            <div class="lado-bloque">
+              <h3 id="capa-titulo"></h3>
+              <p class="capa-desc" id="capa-desc"></p>
+              <div class="leyenda" id="leyenda"></div>
+            </div>
+            <div class="lado-bloque inspector" id="inspector">
+              <h3>Punto en el mapa</h3>
+              <p class="inspector-vacio" id="insp-vacio">Pasa el cursor (o toca) el mapa para ver los datos de cada punto.</p>
+              <dl id="insp-datos" hidden></dl>
+            </div>
+          </div>
+        </section>
+
+        <div class="rejilla-2">
+          <section class="tarjeta">
+            <div class="tarjeta-cab"><h2>Perfil topográfico</h2><span class="sutil" id="perfil-sub"></span></div>
+            <div class="grafica" id="g-perfil"></div>
+            <div class="grafica-ley">
+              <span><i style="background:var(--arena)"></i>Terreno</span>
+              <span><i style="background:var(--agua)"></i>Agua en inundación</span>
+              <span><i style="background:var(--riesgo)"></i>Ladera inestable con lluvia</span>
+            </div>
+          </section>
+          <section class="tarjeta">
+            <div class="tarjeta-cab"><h2>¿Cuánto se inunda?</h2><span class="sutil">si el agua sube sobre los ríos</span></div>
+            <div class="grafica" id="g-inund"></div>
+          </section>
+        </div>
+
+        <div class="rejilla-2">
+          <section class="tarjeta">
+            <div class="tarjeta-cab"><h2>Estabilidad de laderas</h2><span class="sutil">% del terreno</span></div>
+            <div id="estabilidad"></div>
+          </section>
+          <section class="tarjeta">
+            <div class="tarjeta-cab"><h2>Cuencas principales</h2><span class="sutil" id="cuencas-sub"></span></div>
+            <div id="cuencas"></div>
+          </section>
+        </div>
+
+        <section class="tarjeta" id="sec-cambios">
+          <div class="tarjeta-cab">
+            <h2>Cambios y deslaves</h2>
+            <label class="selector">Comparar con
+              <select id="comparar-con"></select>
+            </label>
+          </div>
+          <div id="cambios"></div>
+        </section>
+
+        <footer class="pie" id="pie"></footer>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal para conectar otros dispositivos -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-fondo" data-cerrar></div>
+    <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+      <button class="modal-x" data-cerrar aria-label="Cerrar">×</button>
+      <h2 id="modal-titulo">Ver desde otro dispositivo</h2>
+      <p class="sutil">Escanea con la cámara del celular o escribe la dirección en el navegador de otra computadora.</p>
+      <img class="qr" id="qr" alt="Código QR con la dirección del panel">
+      <div class="url-caja"><code id="url-principal"></code><button class="btn btn-sec btn-ch" id="copiar">Copiar</button></div>
+      <div class="url-otras" id="url-otras"></div>
+      <div class="nota"><b>Tienen que estar en la misma red wifi.</b> Si no carga, la red de la escuela puede estar bloqueando las conexiones entre equipos: prueben con un router propio o compartiendo internet desde un celular.</div>
+    </div>
+  </div>
+
+  <div class="avisos" id="avisos" aria-live="polite"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+PANEL DEL AR SANDBOX — ANÁLISIS DE TERRENO EN VIVO
+===================================================
+
+Qué hace
+--------
+Cada vez que el SARndbox guarda el relieve, el panel lo analiza (relieve,
+pendientes, riesgo de deslave en seco y con lluvia, drenaje y cuencas,
+inundación, perfil topográfico y deslaves detectados) y lo muestra en una
+página web. Cualquier computadora o celular en la misma red puede verlo
+desde el navegador.
+
+Archivos
+--------
+  servidor.py            el programa que se ejecuta (panel web)
+  analizador_terreno.py  los cálculos (también sirve solo, genera un reporte HTML)
+  dependencias.py        revisa e instala las librerías que falten
+  qr.py                  genera el código QR para conectar celulares
+  web/                   la página del panel (no necesita internet)
+
+Cómo usarlo
+-----------
+1) Probar sin el sandbox:
+      python3 servidor.py --demo
+
+2) Con el sandbox:
+   a. En el SARndbox, asignen la herramienta de guardar relieve a una tecla
+      (necesita la simulación de agua encendida). Guarda un archivo llamado
+      BathymetrySaverTool.dem.
+   b. En otra terminal:
+      python3 servidor.py --vigilar ruta/al/BathymetrySaverTool.dem
+   c. Se abre el navegador solo. Cada vez que presionen la tecla en el
+      SARndbox, el panel se actualiza en todos los dispositivos.
+
+3) Desde otras computadoras o celulares: botón "Conectar dispositivo"
+   (muestra un QR y la dirección, algo como http://192.168.1.50:8000).
+   Tienen que estar en la misma red wifi.
+
+La primera vez, si faltan librerías, el programa pregunta y las instala
+(pide la contraseña de Linux Mint). Con --si las instala sin preguntar.
+
+Opciones
+--------
+  --puerto 8080       usar otro puerto si el 8000 está ocupado
+  --escala 10         metros de terreno por cada cm de arena
+  --sin-navegador     no abrir el navegador al iniciar
+
+El tipo de suelo y otros parámetros están al inicio de analizador_terreno.py
+(sección CONFIG).
+
+Si no se pueden conectar otros dispositivos
+-------------------------------------------
+- Revisen que estén en la misma red.
+- Algunas redes escolares bloquean conexiones entre equipos: usen un router
+  propio o compartan internet desde un celular.
+- Si Mint tiene el firewall activo:  sudo ufw allow 8000
+
+Las capturas se guardan en la carpeta historial/ y se recuperan al
+reiniciar el programa.

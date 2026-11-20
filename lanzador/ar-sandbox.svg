@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Ícono del lanzador del AR Sandbox: caja de arena con relieve, curvas de nivel y agua -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="relieve" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#2f7d32"/>
+      <stop offset="0.45" stop-color="#c9b458"/>
+      <stop offset="0.75" stop-color="#a5612d"/>
+      <stop offset="1" stop-color="#f4efe6"/>
+    </linearGradient>
+  </defs>
+  <!-- marco de la caja -->
+  <rect x="8" y="20" width="112" height="92" rx="10" fill="#5b4632"/>
+  <rect x="16" y="28" width="96" height="76" rx="5" fill="#2a6fb0"/>
+  <!-- montañas -->
+  <path d="M16 104 L16 82 Q30 70 40 76 Q52 40 66 36 Q78 34 86 56 Q96 50 112 64 L112 104 Z" fill="url(#relieve)"/>
+  <!-- curvas de nivel -->
+  <g fill="none" stroke="#3b2a1a" stroke-opacity="0.55" stroke-width="2">
+    <path d="M30 96 Q44 70 66 52 Q84 46 100 74"/>
+    <path d="M44 92 Q54 70 66 62 Q80 58 90 80"/>
+    <path d="M56 86 Q62 74 68 72 Q76 72 80 84"/>
+  </g>
+  <!-- agua -->
+  <path d="M16 104 L16 94 Q34 88 52 98 Q66 104 76 104 Z" fill="#4fa3e0" opacity="0.9"/>
+  <!-- proyector -->
+  <circle cx="64" cy="12" r="7" fill="#f2c94c" stroke="#5b4632" stroke-width="2"/>
+</svg>

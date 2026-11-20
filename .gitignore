@@ -1,0 +1,28 @@
+# Capturas y análisis del panel (se generan al usarlo)
+historial/
+historial_demo/
+historial_simulacion/
+analisis/
+panel/analisis/
+
+# Python
+__pycache__/
+*.pyc
+
+# Registros
+logs/
+*.log
+
+# Estado de la instalación, respaldos y archivos generados en cada arranque
+.estado/
+respaldos/
+
+# Compilación del SARndbox (si se compila dentro de este repositorio)
+SARndbox-2.6/bin/
+SARndbox-2.6/o/
+SARndbox-2.6/d/
+SARndbox-2.6/Config.h.temp
+
+# Sistema
+.DS_Store
+*~
