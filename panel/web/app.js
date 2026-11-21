@@ -625,7 +625,8 @@ function rutasCurvas(cv) {
 }
 
 // ============================== MAPA: DIBUJO ================================
-const lienzo = $("#lienzo"), ctx = lienzo.getContext("2d");
+const lienzo = $("#lienzo");
+let ctx = lienzo.getContext("2d");  // se cambia un momento al exportar la imagen
 let dibujoPendiente = false;
 function pedirDibujo() { if (!dibujoPendiente) { dibujoPendiente = true; requestAnimationFrame(dibujar); } }
 function tamLienzo() {
@@ -660,48 +661,55 @@ function dibujar() {
   if (!m) return;
   const img = construirImagen();
   if (!img) return;
-  const { escala: e, ox, oy } = S.vista;
+  pintarMapa(m, img, S.vista.escala, S.vista.ox, S.vista.oy, true);
+  barraEscala(m);
+}
+// Dibuja el mapa y lo que va encima (curvas, línea A–B, flechas) en "ctx".
+function pintarMapa(m, img, e, ox, oy, enPantalla) {
   const categ = ["riesgo_seco", "riesgo_lluvia", "drenaje"].includes(S.capa);
   ctx.imageSmoothingEnabled = !(categ && e > 2.5);
   ctx.imageSmoothingQuality = "high";
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,.18)"; ctx.shadowBlur = 14;
+  if (enPantalla) { ctx.shadowColor = "rgba(0,0,0,.18)"; ctx.shadowBlur = 14; }
   ctx.drawImage(img, ox, oy, m.cols * e, m.filas * e);
   ctx.restore();
 
+  // En la imagen descargada (como el doble de ancha que la pantalla) las líneas, las letras A/B
+  // y las flechas se dibujan al doble de grueso. "ek" solo cambia tamaños, no posiciones.
+  const ek = enPantalla ? e : e / 2;
   ctx.save();
   ctx.translate(ox, oy); ctx.scale(e, e);
   // curvas de nivel
   if (S.curvas && m.rutas) {
     const oscuro = S.capa === "relieve" ? "rgba(40,30,20," : "rgba(25,25,25,";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = oscuro + (S.capa === "relieve" ? ".38)" : ".28)"); ctx.lineWidth = .8 / e; ctx.stroke(m.rutas.normal);
-    ctx.strokeStyle = oscuro + (S.capa === "relieve" ? ".7)" : ".5)"); ctx.lineWidth = 1.6 / e; ctx.stroke(m.rutas.maestra);
+    ctx.strokeStyle = oscuro + (S.capa === "relieve" ? ".38)" : ".28)"); ctx.lineWidth = .8 / ek; ctx.stroke(m.rutas.normal);
+    ctx.strokeStyle = oscuro + (S.capa === "relieve" ? ".7)" : ".5)"); ctx.lineWidth = 1.6 / ek; ctx.stroke(m.rutas.maestra);
   }
   // línea del perfil
   if (S.linea && (S.capa === "relieve" || S.perfilHover != null || S.perfilFijo != null)) {
     const [ax, ay] = S.linea.a, [bx, by] = S.linea.b;
-    ctx.setLineDash([6 / e, 4 / e]);
-    ctx.strokeStyle = "rgba(192,57,43,.9)"; ctx.lineWidth = 2 / e;
+    ctx.setLineDash([6 / ek, 4 / ek]);
+    ctx.strokeStyle = "rgba(192,57,43,.9)"; ctx.lineWidth = 2 / ek;
     ctx.beginPath(); ctx.moveTo(ax + .5, ay + .5); ctx.lineTo(bx + .5, by + .5); ctx.stroke();
     ctx.setLineDash([]);
-    etiquetaMapa("A", ax + .5, ay + .5, e); etiquetaMapa("B", bx + .5, by + .5, e);
+    etiquetaMapa("A", ax + .5, ay + .5, ek); etiquetaMapa("B", bx + .5, by + .5, ek);
     if (S.perfilHover != null) {
       const x = ax + (bx - ax) * S.perfilHover + .5, y = ay + (by - ay) * S.perfilHover + .5;
-      punto(x, y, e, "#c0392b");
+      punto(x, y, ek, "#c0392b");
     }
     if (S.perfilFijo != null) {
       const x = ax + (bx - ax) * S.perfilFijo + .5, y = ay + (by - ay) * S.perfilFijo + .5;
-      punto(x, y, e, "#2a6146", 8);
+      punto(x, y, ek, "#2a6146", 8);
     }
   }
   // flechas de deslaves
   if (S.capa === "cambios") {
     const c = S.comp.get(`${S.compararCon}-${S.actual}`);
-    (c && c.eventos || []).forEach((ev, i) => flecha(ev.centro[1] + .5, ev.centro[0] + .5, ev.destino[1] + .5, ev.destino[0] + .5, e, i + 1));
+    (c && c.eventos || []).forEach((ev, i) => flecha(ev.centro[1] + .5, ev.centro[0] + .5, ev.destino[1] + .5, ev.destino[0] + .5, ek, i + 1));
   }
   // punto bajo el cursor
-  if (S.hover) {
+  if (enPantalla && S.hover) {
     ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5 / e;
     ctx.strokeRect(S.hover.c, S.hover.r, 1, 1);
     ctx.strokeStyle = "#111"; ctx.lineWidth = 1 / e;
@@ -709,7 +717,6 @@ function dibujar() {
     if (e < 6) { ctx.beginPath(); ctx.arc(S.hover.c + .5, S.hover.r + .5, 7 / e, 0, 7); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 / e; ctx.stroke(); }
   }
   ctx.restore();
-  barraEscala(m);
 }
 function etiquetaMapa(txt, x, y, e) {
   ctx.save(); ctx.translate(x, y); ctx.scale(1 / e, 1 / e);
@@ -748,6 +755,94 @@ function barraEscala(m) {
   el.querySelector("span").style.width = `${largo / mpp}px`;
   el.querySelector("b").textContent = fmtLen(largo);
 }
+
+// ============================== DESCARGAR IMAGEN DEL MAPA ===================
+// Guarda en JPG el mapa completo de la capa que se está viendo, con título, leyenda,
+// barra de escala y norte. Siempre en colores claros, para imprimir o pegar en un trabajo.
+function leyendaExport(m) {
+  const k = m.kpis, comp = S.compararCon ? S.comp.get(`${S.compararCon}-${S.actual}`) : null;
+  const grad = (lut, a, b) => ({ grad: lut, a, b });
+  const clasesFS = () => ({ items: FS.map(c => [rgb(c.color), c.nombre]) });
+  switch (S.capa) {
+    case "relieve": return grad(RAMPA.relieve, `${nf(k.zmin)} m`, `${nf(k.zmax)} m`);
+    case "pendiente": return grad(RAMPA.pendiente, "0°", t("45° o más", "45° or more"));
+    case "riesgo_seco": case "riesgo_lluvia": return clasesFS();
+    case "drenaje": return { items: [...m.cuencas.slice(0, 4).map((c, i) => [CUENCAS[i], `${t("Cuenca", "Watershed")} ${c.n}`]), ["#0b4f9c", t("Ríos", "Rivers")]] };
+    case "inundacion": return grad(RAMPA.agua, t("poca agua", "shallow"), t("más profundo", "deeper"));
+    case "cambios": return comp ? grad(RAMPA.cambios, `−${nf(comp.max_abs, 1)} m`, `+${nf(comp.max_abs, 1)} m`) : {};
+  }
+  return {};
+}
+function detalleExport(m) {
+  const esc = escenario(m);
+  if (S.capa === "riesgo_lluvia") return t(`Suelo ${nf(esc.lluvia * 100)}% mojado · ${nf(esc.inestable, 1)}% del terreno inestable`, `Soil ${nf(esc.lluvia * 100)}% wet · ${nf(esc.inestable, 1)}% of terrain unstable`);
+  if (S.capa === "riesgo_seco") return t(`Suelo seco · ${nf(m.cuadro[0].seco, 1)}% del terreno inestable`, `Dry soil · ${nf(m.cuadro[0].seco, 1)}% of terrain unstable`);
+  if (S.capa === "inundacion") return t(`Ríos crecidos +${nf(esc.nivel, 1)} m · ${nf(esc.inund, 1)}% del terreno inundado`, `Rivers up +${nf(esc.nivel, 1)} m · ${nf(esc.inund, 1)}% of terrain flooded`);
+  if (S.capa === "cambios") return t(`Comparado con la captura #${S.compararCon}`, `Compared with capture #${S.compararCon}`);
+  if (S.capa === "relieve") return t(`Curvas de nivel cada ${nf(m.curvas.intervalo)} m`, `Contour lines every ${nf(m.curvas.intervalo)} m`);
+  return "";
+}
+async function descargarImagenMapa() {
+  const m = S.meta.get(S.actual), img = m && construirImagen();
+  if (!img) { aviso(t("El mapa todavía se está cargando.", "The map is still loading.")); return; }
+  const e = Math.max(1, 1600 / m.cols), MW = Math.round(m.cols * e), MH = Math.round(m.filas * e);
+  const P = 32, CAB = 92, PIE = 96, W = MW + 2 * P, H = CAB + MH + PIE;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d");
+  const TX = "#2e241c", TX2 = "#6a5a4e", FONDO = "#fdfaf5", fuente = "system-ui, -apple-system, 'Segoe UI', sans-serif";
+  g.fillStyle = FONDO; g.fillRect(0, 0, W, H);
+  // título
+  const capa = capaActual();
+  g.fillStyle = TX; g.textBaseline = "alphabetic"; g.textAlign = "left";
+  g.font = `800 34px ${fuente}`; g.fillText(`${capa.nombre} · ${t("Captura", "Capture")} #${m.id}`, P, 46);
+  g.font = `500 19px ${fuente}`; g.fillStyle = TX2;
+  g.fillText([fechaLarga(m.hora), detalleExport(m)].filter(Boolean).join("  ·  "), P, 76);
+  g.textAlign = "right"; g.font = `700 16px ${fuente}`; g.fillStyle = "#2a6146";
+  g.fillText(t("Sandbox Terreno", "Sandbox Terrain"), W - P, 46);
+  // mapa (se dibuja con las mismas funciones que la pantalla)
+  const antes = ctx; ctx = g;
+  try { g.save(); pintarMapa(m, img, e, P, CAB, false); g.restore(); } finally { ctx = antes; }
+  g.strokeStyle = "rgba(0,0,0,.25)"; g.lineWidth = 1; g.strokeRect(P + .5, CAB + .5, MW - 1, MH - 1);
+  // leyenda
+  const y0 = CAB + MH + 26, ley = leyendaExport(m);
+  g.textAlign = "left"; g.textBaseline = "middle"; g.font = `600 17px ${fuente}`; g.fillStyle = TX;
+  if (ley.grad) {
+    const gw = Math.min(420, MW * .4), gr = g.createLinearGradient(P, 0, P + gw, 0);
+    for (let i = 0; i <= 8; i++) { const q = Math.round(i / 8 * 255) * 3; gr.addColorStop(i / 8, `rgb(${ley.grad[q]},${ley.grad[q + 1]},${ley.grad[q + 2]})`); }
+    g.fillStyle = gr; g.fillRect(P, y0, gw, 16); g.strokeStyle = "rgba(0,0,0,.2)"; g.strokeRect(P + .5, y0 + .5, gw - 1, 15);
+    g.fillStyle = TX2; g.textBaseline = "top"; g.fillText(ley.a, P, y0 + 24);
+    g.textAlign = "right"; g.fillText(ley.b, P + gw, y0 + 24); g.textAlign = "left";
+  } else if (ley.items) {
+    let x = P;
+    for (const [col, nom] of ley.items) {
+      g.fillStyle = col; g.beginPath(); g.arc(x + 8, y0 + 10, 8, 0, 7); g.fill();
+      g.fillStyle = TX; g.fillText(nom, x + 22, y0 + 10);
+      x += 22 + g.measureText(nom).width + 26;
+    }
+  }
+  // barra de escala y norte
+  const mpp = m.celda / e, objetivo = 220 * mpp, pp = Math.pow(10, Math.floor(Math.log10(objetivo)));
+  const largo = [1, 2, 5, 10].map(f => f * pp).filter(v => v <= objetivo).pop() || pp, lpx = largo / mpp;
+  const xe = W - P - 70 - lpx;
+  g.fillStyle = TX; g.fillRect(xe, y0 + 8, lpx, 5); g.fillRect(xe, y0 + 2, 2, 17); g.fillRect(xe + lpx - 2, y0 + 2, 2, 17);
+  g.textAlign = "center"; g.textBaseline = "top"; g.font = `700 15px ${fuente}`; g.fillText(fmtLen(largo), xe + lpx / 2, y0 + 24);
+  const xn = W - P - 20;
+  g.beginPath(); g.moveTo(xn, y0 - 6); g.lineTo(xn + 11, y0 + 26); g.lineTo(xn, y0 + 18); g.lineTo(xn - 11, y0 + 26); g.closePath(); g.fill();
+  g.font = `800 15px ${fuente}`; g.fillText("N", xn, y0 + 32);
+  g.textAlign = "left"; g.textBaseline = "alphabetic"; g.font = `500 14px ${fuente}`; g.fillStyle = TX2;
+  g.fillText(t(`Escala: 1 cm de arena = ${nf(m.parametros.metros_por_cm, 1)} m · Modelo educativo del AR Sandbox`,
+               `Scale: 1 cm of sand = ${nf(m.parametros.metros_por_cm, 1)} m · Educational AR Sandbox model`), P, H - 16);
+  // guardar
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", .92));
+  if (!blob) { aviso(t("No se pudo crear la imagen.", "Couldn’t create the image.")); return; }
+  const d = new Date(m.hora), dos = n => String(n).padStart(2, "0");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `sandbox_${t("captura", "capture")}${m.id}_${capa.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}_${d.getFullYear()}${dos(d.getMonth() + 1)}${dos(d.getDate())}_${dos(d.getHours())}${dos(d.getMinutes())}.jpg`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+$("#t-imagen").onclick = descargarImagenMapa;
 
 // ============================== MAPA: INTERACCIÓN ===========================
 const punteros = new Map();
