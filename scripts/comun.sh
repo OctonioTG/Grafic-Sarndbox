@@ -89,8 +89,7 @@ candidatos_sarndbox() {
     if tiene SARndbox; then command -v SARndbox; fi
     # ~/src/SARndbox-X.Y/bin/SARndbox, de la versión más nueva a la más vieja
     for d in "$HOME"/src/SARndbox-*/bin/SARndbox "$HOME"/SARndbox-*/bin/SARndbox \
-             /opt/SARndbox-*/bin/SARndbox /usr/local/SARndbox-*/bin/SARndbox \
-             "$RAIZ"/SARndbox-*/bin/SARndbox; do
+             /opt/SARndbox-*/bin/SARndbox /usr/local/SARndbox-*/bin/SARndbox; do
         [ -x "$d" ] && printf '%s\n' "$d"
     done | sort -t- -k2 -r
     for d in /usr/local/bin/SARndbox /usr/bin/SARndbox "$HOME/bin/SARndbox"; do
@@ -133,13 +132,12 @@ carpeta_etc_sarndbox() {
     return 1
 }
 
-detectar_vrui_version() {
+detectar_vrui_version() {  # la versión más nueva instalada (por ejemplo 8.0)
     local d v
-    for d in /usr/local/etc/Vrui-* /usr/etc/Vrui-* "$HOME"/Vrui-*/etc/Vrui-* /usr/local/share/Vrui-*; do
-        [ -e "$d" ] || continue
-        v="$(printf '%s' "$d" | sed -n 's/.*Vrui-\([0-9][0-9.]*\).*/\1/p')"
-        [ -n "$v" ] && { printf '%s' "$v"; return 0; }
-    done
+    v="$(for d in /usr/local/etc/Vrui-* /usr/etc/Vrui-* "$HOME"/Vrui-*/etc/Vrui-* /usr/local/share/Vrui-*; do
+            [ -e "$d" ] && printf '%s\n' "$d" | sed -n 's/.*Vrui-\([0-9][0-9.]*[0-9]\).*/\1/p'
+         done | sort -t. -k1,1n -k2,2n | tail -1)"
+    [ -n "$v" ] && { printf '%s' "$v"; return 0; }
     return 1
 }
 

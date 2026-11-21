@@ -5,8 +5,8 @@ sarndbox_falso.py — Un "SARndbox de mentira" para probar sin Kinect ni proyect
 Escribe archivos .dem en la ruta indicada, con el MISMO formato que la
 herramienta BathymetrySaverTool del SARndbox 2.6 (formato USGS DEM en texto,
 registros de 1024 caracteres, una columna por perfil, de sur a norte).
-El código de escritura es una traducción directa de
-SARndbox-2.6/BathymetrySaverTool.cpp (función writeDEMFile).
+El código de escritura es una traducción directa de BathymetrySaverTool.cpp
+(función writeDEMFile) del código fuente del SARndbox 2.6 de Oliver Kreylos.
 
 Cuándo guarda un relieve nuevo:
   - cada --cada segundos (0 = nunca automáticamente),

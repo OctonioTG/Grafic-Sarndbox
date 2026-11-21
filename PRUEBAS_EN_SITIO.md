@@ -44,7 +44,7 @@ Abran una Terminal. Copien cada comando, péguenlo con `Ctrl+Shift+V` y anoten e
   find ~ /usr/local /opt -name SARndbox -type f 2>/dev/null
   ```
 
-  Anoten la ruta (por ejemplo `/home/sandbox/src/SARndbox-2.6/bin/SARndbox`) y la versión (el número en el nombre de la carpeta).
+  Anoten la ruta (por ejemplo `/home/sandbox/src/SARndbox-2.8/bin/SARndbox`) y la versión (el número en el nombre de la carpeta).
 
 - [ ] **1.2 Calibración**
 
@@ -52,7 +52,7 @@ Abran una Terminal. Copien cada comando, péguenlo con `Ctrl+Shift+V` y anoten e
   find ~ /usr/local -name BoxLayout.txt -o -name ProjectorMatrix.dat 2>/dev/null
   ```
 
-  Normalmente están juntas en `.../SARndbox-2.6/etc/SARndbox-2.6/`. Si hay varias copias, pregunten cuál es la buena (la fecha más reciente suele ser la correcta: `ls -l RUTA`).
+  Normalmente están juntas en `.../SARndbox-2.8/etc/SARndbox-2.8/`. Si hay varias copias, pregunten cuál es la buena (la fecha más reciente suele ser la correcta: `ls -l RUTA`).
 
 - [ ] **1.3 Cómo lo arrancaban antes.** Pregunten a quien lo usa, o busquen:
 
@@ -89,7 +89,7 @@ Abran una Terminal. Copien cada comando, péguenlo con `Ctrl+Shift+V` y anoten e
 - [ ] **1.6 Copia de seguridad de la calibración** (solo copia, no cambia nada). Cambien la ruta por la del paso 1.2:
 
   ```bash
-  cp -a ~/src/SARndbox-2.6/etc/SARndbox-2.6 ~/respaldo-calibracion-$(date +%Y%m%d)
+  cp -a ~/src/SARndbox-2.8/etc/SARndbox-2.8 ~/respaldo-calibracion-$(date +%Y%m%d)
   ```
 
 - [ ] **1.7 Ayuda del programa** (para confirmar opciones; la ventana puede abrirse, ciérrenla con `Esc`):
@@ -209,6 +209,7 @@ Anoten cuál funcionó: ______________________
   ```
 
   Tampoco debe salir nada.
+- [ ] Si la computadora no tenía el AR Sandbox: anoten la versión de Linux Mint y si `bash instalar.sh` pudo instalar Vrui, Kinect y SARndbox 2.8. Si falló, copien a la USB el archivo `logs/instalar_sarndbox_*.log`. Después de calibrar, revisen que `./iniciar_sandbox.sh --revisar` encuentre `~/src/SARndbox-2.8`, que la tecla `g` guarde y que el agua funcione con `CALIDAD_AGUA`.
 - [ ] En el panel, abran Configuración (botón del engrane): cambien a Español, cambien el tipo de suelo a "Arena suelta" y guarden. Los números deben cambiar en todos los dispositivos conectados. Desde un celular, la escala y el suelo deben verse bloqueados. Al final, pulsen "Volver a los valores normales" y guarden.
 - [ ] Vuelvan a abrir el ícono: debe arrancar normal (sin "ya está abierto" ni "puerto ocupado").
 - [ ] Con el sandbox abierto, hagan doble clic otra vez en el ícono: debe decir que **ya está abierto** y no abrir una segunda copia.

@@ -20,12 +20,6 @@ logs/
 .estado/
 respaldos/
 
-# Compilación del SARndbox (si se compila dentro de este repositorio)
-SARndbox-2.6/bin/
-SARndbox-2.6/o/
-SARndbox-2.6/d/
-SARndbox-2.6/Config.h.temp
-
 # Sistema
 .DS_Store
 *~

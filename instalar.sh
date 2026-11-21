@@ -7,11 +7,13 @@
 #    1. Instala con apt lo que falte: python3-numpy, python3-matplotlib,
 #       python3-scipy, zenity (ventanas), xdotool (pantalla completa),
 #       x11-xserver-utils (xrandr, para encontrar el proyector).
-#    2. Crea el ícono "AR Sandbox" en el escritorio y en el menú de Mint,
+#    2. Si no encuentra el SARndbox, ofrece instalarlo completo (Vrui, Kinect
+#       y SARndbox 2.8) con scripts/instalar_sarndbox.sh.
+#    3. Crea el ícono "AR Sandbox" en el escritorio y en el menú de Mint,
 #       marcado como confiable, y otro "AR Sandbox (simulación)" solo en el menú.
-#    3. Crea la carpeta donde se guarda el relieve (RUTA_DEM).
-#    4. Si el firewall (ufw) está activo, ofrece abrir el puerto del panel.
-#    5. Revisa que todo esté listo (iniciar_sandbox.sh --revisar).
+#    4. Crea la carpeta donde se guarda el relieve (RUTA_DEM).
+#    5. Si el firewall (ufw) está activo, ofrece abrir el puerto del panel.
+#    6. Revisa que todo esté listo (iniciar_sandbox.sh --revisar).
 #
 #  NO toca los archivos de calibración ni la configuración del SARndbox.
 #  Todo lo que crea queda anotado en .estado/ para que desinstalar.sh lo quite.
@@ -64,11 +66,32 @@ else
 fi
 
 # ---------------------------------------------------------------------
-# 2. Íconos (lanzadores .desktop)
+# 2. El AR Sandbox (SARndbox, Vrui y Kinect)
 # ---------------------------------------------------------------------
 info ""
-info "2) Íconos del escritorio y del menú"
-chmod +x "$RAIZ/iniciar_sandbox.sh" "$RAIZ/instalar.sh" "$RAIZ/desinstalar.sh" "$RAIZ/scripts/sarndbox_falso.py" 2>/dev/null
+info "2) El AR Sandbox (SARndbox)"
+if [ -n "$SARNDBOX_EJECUTABLE" ] && [ -x "$SARNDBOX_EJECUTABLE" ]; then
+    info "   Ya está: $SARNDBOX_EJECUTABLE"
+elif [ -n "$(candidatos_sarndbox | head -1)" ]; then
+    info "   Ya está: $(candidatos_sarndbox | head -1)"
+else
+    info "   No encontré el SARndbox en esta computadora."
+    info "   Puedo instalarlo completo (Vrui 8.0 + Kinect 3.10 + SARndbox 2.8, la versión"
+    info "   de la guía oficial). Se descarga de internet y tarda entre 30 y 60 minutos."
+    info "   Después hay que calibrar la caja y el proyector a mano (al final explica cómo)."
+    if preguntar "   ¿Instalo el SARndbox ahora?"; then
+        bash "$RAIZ/scripts/instalar_sarndbox.sh" || aviso "La instalación del SARndbox no terminó. Sigo con el panel; pueden repetirla después con:  bash scripts/instalar_sarndbox.sh"
+    else
+        info "   Bien. Si después lo quieren instalar:  bash scripts/instalar_sarndbox.sh"
+    fi
+fi
+
+# ---------------------------------------------------------------------
+# 3. Íconos (lanzadores .desktop)
+# ---------------------------------------------------------------------
+info ""
+info "3) Íconos del escritorio y del menú"
+chmod +x "$RAIZ/iniciar_sandbox.sh" "$RAIZ/instalar.sh" "$RAIZ/desinstalar.sh" "$RAIZ/scripts/sarndbox_falso.py" "$RAIZ/scripts/instalar_sarndbox.sh" 2>/dev/null
 
 # En los archivos .desktop, dentro de comillas hay que escapar \ " ` $ y duplicar %
 escapar_desktop() {
@@ -119,19 +142,19 @@ fi
 if tiene update-desktop-database; then update-desktop-database "$MENU" >/dev/null 2>&1 || true; fi
 
 # ---------------------------------------------------------------------
-# 3. Carpeta del relieve
+# 4. Carpeta del relieve
 # ---------------------------------------------------------------------
 info ""
-info "3) Carpeta donde se guarda el relieve"
+info "4) Carpeta donde se guarda el relieve"
 if mkdir -p "$(dirname "$RUTA_DEM")"; then
     info "   $(dirname "$RUTA_DEM")"
 fi
 
 # ---------------------------------------------------------------------
-# 4. Firewall
+# 5. Firewall
 # ---------------------------------------------------------------------
 info ""
-info "4) Firewall (para que los celulares puedan entrar al panel)"
+info "5) Firewall (para que los celulares puedan entrar al panel)"
 if tiene ufw; then
     info "   Para saber si el firewall está activo se necesita sudo."
     if preguntar "   ¿Reviso el firewall y, si está activo, abro el puerto $PUERTO?"; then
@@ -151,10 +174,10 @@ else
 fi
 
 # ---------------------------------------------------------------------
-# 5. Revisión final
+# 6. Revisión final
 # ---------------------------------------------------------------------
 info ""
-info "5) Revisión de la configuración (sandbox.conf)"
+info "6) Revisión de la configuración (sandbox.conf)"
 if bash "$RAIZ/iniciar_sandbox.sh" --revisar --sin-ventanas; then
     info ""
     info "Instalación terminada. Abre el ícono \"AR Sandbox\" del escritorio."

@@ -46,7 +46,7 @@ Open a Terminal. Copy each command, paste it with `Ctrl+Shift+V`, and write down
   find ~ /usr/local /opt -name SARndbox -type f 2>/dev/null
   ```
 
-  Write down the path (for example `/home/sandbox/src/SARndbox-2.6/bin/SARndbox`) and the version (the number in the folder name).
+  Write down the path (for example `/home/sandbox/src/SARndbox-2.8/bin/SARndbox`) and the version (the number in the folder name).
 
 - [ ] **1.2 Calibration**
 
@@ -54,7 +54,7 @@ Open a Terminal. Copy each command, paste it with `Ctrl+Shift+V`, and write down
   find ~ /usr/local -name BoxLayout.txt -o -name ProjectorMatrix.dat 2>/dev/null
   ```
 
-  They are usually together in `.../SARndbox-2.6/etc/SARndbox-2.6/`. If there are several copies, ask which one is right. The most recent date is usually the correct one (`ls -l PATH`).
+  They are usually together in `.../SARndbox-2.8/etc/SARndbox-2.8/`. If there are several copies, ask which one is right. The most recent date is usually the correct one (`ls -l PATH`).
 
 - [ ] **1.3 How it was started before.** Ask whoever uses it, or search:
 
@@ -91,7 +91,7 @@ Open a Terminal. Copy each command, paste it with `Ctrl+Shift+V`, and write down
 - [ ] **1.6 Back up the calibration** (only copies, changes nothing). Replace the path with the one from step 1.2:
 
   ```bash
-  cp -a ~/src/SARndbox-2.6/etc/SARndbox-2.6 ~/respaldo-calibracion-$(date +%Y%m%d)
+  cp -a ~/src/SARndbox-2.8/etc/SARndbox-2.8 ~/respaldo-calibracion-$(date +%Y%m%d)
   ```
 
 - [ ] **1.7 Program help** (to confirm the options; if a window opens, close it with `Esc`):
@@ -211,6 +211,7 @@ Write down which one worked: ______________________
   ```
 
   This should print nothing either.
+- [ ] If the computer didn't have the AR Sandbox: write down the Linux Mint version and whether `bash instalar.sh` managed to install Vrui, Kinect and SARndbox 2.8. If it failed, copy the `logs/instalar_sarndbox_*.log` file to the USB drive. After calibrating, check that `./iniciar_sandbox.sh --revisar` finds `~/src/SARndbox-2.8`, that the `g` key saves, and that water works with `CALIDAD_AGUA`.
 - [ ] In the panel, open Settings (gear button): switch to Español, change the soil type to "Loose sand" and save. The numbers should change on every connected device. On a phone, scale and soil should appear locked. At the end, press "Restore defaults" and save.
 - [ ] Open the icon again. It should start normally, with no "ya está abierto" (already open) or "puerto ocupado" (port in use) message.
 - [ ] With the sandbox open, double-click the icon again. It should say it is **already open** and not start a second copy.

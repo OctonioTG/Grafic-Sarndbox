@@ -32,7 +32,6 @@ With a **double click** on the "AR Sandbox" icon:
 | `panel/` | The web panel (`servidor.py`, the analysis code and the web page). |
 | `scripts/` | Internal pieces: shared functions and the **fake SARndbox** used for testing. |
 | `lanzador/` | Icon image. |
-| `SARndbox-2.6/` | Original AR Sandbox source by Oliver Kreylos (UC Davis), **unchanged**. Kept for reference. |
 | `logs/` | Logs of each run (created automatically). |
 
 ---
@@ -48,6 +47,10 @@ With a **double click** on the "AR Sandbox" icon:
    ```
 
 4. The installer **asks before** using your password (`sudo`). Answer `s` ("sí", yes) to install what is missing.
+   - **If the computer doesn't have the AR Sandbox yet**, the installer detects it and offers to install all of it: Vrui 8.0, Kinect 3.10 and SARndbox 2.8, the same as [Kreylos's official guide](https://web.cs.ucdavis.edu/~okreylos/ResDev/SARndbox/SoftwareInstallation.html). It needs internet and takes 30 to 60 minutes. It ends up in `~/src/SARndbox-2.8`.
+   - It works best with an **NVIDIA** graphics card with its driver installed (Menu → Driver Manager). Kreylos tested on Linux Mint 19; on newer versions a package may fail. If it fails, it says at which step and logs everything to `logs/instalar_sarndbox_*.log`.
+   - It can also be run on its own: `bash scripts/instalar_sarndbox.sh`.
+   - **The box (Kinect) and the projector still have to be calibrated by hand**, in front of the sandbox. When it finishes, the installer explains the steps; the official guide has them with photos.
 5. At the end it runs a check. If something says `[FALLA]` (failure), open `sandbox.conf` with a text editor and fix what it says. Then check again with:
 
    ```bash
@@ -87,7 +90,7 @@ With a **double click** on the "AR Sandbox" icon:
 The default is **`g`**. Change it with `TECLA_GUARDAR` in `sandbox.conf`.
 
 - Press it while the **SARndbox window is active**. If you clicked on another window, click on SARndbox first.
-- It needs the **water simulation on**. The launcher always turns it on (`-ws 1.0 30`).
+- It needs the **water simulation on**. The launcher always turns it on, with the quality set in `CALIDAD_AGUA` in `sandbox.conf` (default `media`, lighter than the original).
 - The terrain is saved to `~/SARndbox-capturas/BathymetrySaverTool.dem`. Change it with `RUTA_DEM`. The panel keeps a copy of every capture in `panel/historial/`.
 
 ### Assigning the key by hand (if the automatic setup does not work)

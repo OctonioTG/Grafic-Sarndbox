@@ -29,7 +29,6 @@ Con un **doble clic** en el ícono "AR Sandbox":
 | `panel/` | El panel web (`servidor.py`, el análisis y la página). |
 | `scripts/` | Piezas internas: funciones compartidas y el **SARndbox falso** para pruebas. |
 | `lanzador/` | Imagen del ícono. |
-| `SARndbox-2.6/` | Código original del AR Sandbox de Oliver Kreylos (UC Davis), **sin cambios**. Sirve de referencia. |
 | `logs/` | Registros de cada vez que se abre (se crea solo). |
 
 ---
@@ -45,6 +44,10 @@ Con un **doble clic** en el ícono "AR Sandbox":
    ```
 
 4. El instalador **pregunta antes** de usar la contraseña (`sudo`). Contesten `s` para instalar lo que falte.
+   - **Si la computadora todavía no tiene el AR Sandbox**, el instalador lo detecta y ofrece instalarlo completo: Vrui 8.0, Kinect 3.10 y SARndbox 2.8, igual que la [guía oficial de Kreylos](https://web.cs.ucdavis.edu/~okreylos/ResDev/SARndbox/SoftwareInstallation.html). Necesita internet y tarda entre 30 y 60 minutos. Queda en `~/src/SARndbox-2.8`.
+   - Funciona mejor con una tarjeta de video **NVIDIA** con su controlador instalado (Menú → Administrador de controladores). Kreylos lo probó en Linux Mint 19; en versiones más nuevas puede fallar algún paquete. Si falla, dice en qué paso y deja todo en `logs/instalar_sarndbox_*.log`.
+   - Se puede correr solo, por separado: `bash scripts/instalar_sarndbox.sh`.
+   - **Después hay que calibrar a mano** la caja (Kinect) y el proyector, frente al sandbox. Al terminar, el instalador explica los pasos; vienen con fotos en la guía oficial.
 5. Al final hace una revisión. Si dice `[FALLA]` en algo, abran `sandbox.conf` con el editor de textos, corrijan lo que indica y prueben otra vez con:
 
    ```bash
@@ -84,7 +87,7 @@ Con un **doble clic** en el ícono "AR Sandbox":
 Por defecto es **`g`** (se cambia en `sandbox.conf`, `TECLA_GUARDAR`).
 
 - Hay que presionarla con la **ventana del SARndbox activa** (si hicieron clic en otra ventana, hagan clic sobre el SARndbox primero).
-- Necesita la **simulación de agua encendida**. El lanzador siempre la enciende (`-ws 1.0 30`).
+- Necesita la **simulación de agua encendida**. El lanzador siempre la enciende, con la calidad que diga `CALIDAD_AGUA` en `sandbox.conf` (por defecto `media`, más ligera que la original).
 - El relieve se guarda en `~/SARndbox-capturas/BathymetrySaverTool.dem` (se cambia en `RUTA_DEM`). El panel guarda una copia de cada captura en `panel/historial/`.
 
 ### Asignar la tecla a mano (si la automática no funciona)
