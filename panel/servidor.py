@@ -255,6 +255,9 @@ def capa_binaria(alm, cid, nombre):
         "elevacion": r["z"], "sombreado": r["sombreado"], "pendiente": r["pend"], "orientacion": r["orient"],
         "fs_seco": r["fs_seco"], "fs_lluvia": r["fs_sat"], "rios": h["rios"].astype(float),
         "cuencas": h["cuencas"].astype(float), "inundacion": r["prof"],
+        # Para que la página calcule la inundación con cualquier nivel de agua:
+        # HAND = altura sobre el río más cercano; encharcamiento = agua en hundimientos.
+        "hand": h["hand"], "encharcamiento": h["encharcamiento"],
         "acumulacion": np.log10(h["acum"]),
     }
     if nombre not in capas:

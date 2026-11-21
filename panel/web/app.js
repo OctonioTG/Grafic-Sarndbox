@@ -9,6 +9,9 @@ const S = {
   actual: null, compararCon: null,
   meta: new Map(), capas: new Map(), comp: new Map(), compCapa: new Map(), imagenes: new Map(),
   capa: "relieve", curvas: true, seguir: true,
+  nivel: null,      // nivel del agua elegido por el usuario (null = el del análisis)
+  linea: null,      // puntos A y B del perfil, en celdas
+  perfilFijo: null, // punto marcado en el perfil (0 = A, 1 = B)
   vista: { escala: 1, ox: 0, oy: 0, ajustada: false },
   hover: null, perfilHover: null, token: 0, conectado: false,
 };
@@ -77,10 +80,10 @@ const CAPAS = [
   { id: "riesgo_seco", nombre: "Deslave · seco", icono: "#e8833a", datos: ["fs_seco"] },
   { id: "riesgo_lluvia", nombre: "Deslave · lluvia", icono: "#c0392b", datos: ["fs_lluvia"] },
   { id: "drenaje", nombre: "Drenaje", icono: "#4e79a7", datos: ["cuencas", "rios"] },
-  { id: "inundacion", nombre: "Inundación", icono: "#2f7fd1", datos: ["inundacion"] },
+  { id: "inundacion", nombre: "Inundación", icono: "#2f7fd1", datos: ["hand", "encharcamiento"] },
   { id: "cambios", nombre: "Cambios", icono: "#8e5ab5", datos: [], comp: true },
 ];
-const TODAS_LAS_CAPAS = ["elevacion", "sombreado", "pendiente", "orientacion", "fs_seco", "fs_lluvia", "inundacion", "cuencas", "rios"];
+const TODAS_LAS_CAPAS = ["elevacion", "sombreado", "pendiente", "orientacion", "fs_seco", "fs_lluvia", "hand", "encharcamiento", "cuencas", "rios"];
 
 // ============================== RED =========================================
 async function getJSON(url) {
@@ -99,6 +102,33 @@ async function capaDatos(id, nombre) {
   try { const v = await p; S.capas.set(k, v); return v; } catch (e) { S.capas.delete(k); throw e; }
 }
 const capaLista = (id, nombre) => { const v = S.capas.get(`${id}:${nombre}`); return v instanceof Float32Array ? v : null; };
+
+// ---- Inundación con cualquier nivel de agua (mismo método HAND que el analizador) ----
+// HAND = altura de cada punto sobre el río más cercano. Si el agua sube "nivel" metros,
+// se moja todo lo que está a menos de esa altura; además se suma el agua de los hundimientos.
+const nivelActual = m => S.nivel != null ? S.nivel : m.kpis.nivel;
+function profundidad(id, i, nivel) {
+  const h = capaLista(id, "hand"), e = capaLista(id, "encharcamiento");
+  if (!h || !e) return undefined;
+  return Math.max(h[i] < nivel ? nivel - h[i] : 0, e[i] > 0 ? e[i] : 0);
+}
+function interpCurva(m, nivel) {
+  const h = m.curva.nivel, a = m.curva.area;
+  let i = 1; while (i < h.length - 1 && h[i] < nivel) i++;
+  const t = Math.max(0, Math.min(1, (nivel - h[i - 1]) / ((h[i] - h[i - 1]) || 1)));
+  return a[i - 1] + (a[i] - a[i - 1]) * t;
+}
+const cachePct = new Map();
+function pctInundado(m, nivel) {
+  const k = `${m.id}:${nivel.toFixed(3)}`;
+  if (cachePct.has(k)) return cachePct.get(k);
+  const h = capaLista(m.id, "hand"), e = capaLista(m.id, "encharcamiento");
+  if (!h || !e) return interpCurva(m, nivel);
+  let c = 0; for (let i = 0; i < h.length; i++) if (h[i] < nivel || e[i] > 0) c++;
+  const v = 100 * c / h.length;
+  if (cachePct.size > 400) cachePct.clear();
+  cachePct.set(k, v); return v;
+}
 function limpiarCache() {
   // conserva solo las 3 capturas más recientes que se han visto
   const ids = [...new Set([...S.capas.keys()].map(k => +k.split(":")[0]))];
@@ -183,7 +213,8 @@ async function seleccionar(id) {
     m.rutas = rutasCurvas(m.curvas);
     S.meta.set(id, m);
   }
-  if (cambioDeCaptura) S.compararCon = m.anterior;
+  if (cambioDeCaptura) { S.compararCon = m.anterior; S.nivel = null; S.perfilFijo = null; }
+  if (!S.linea || S.linea.dims !== `${m.filas}x${m.cols}`) S.linea = lineaOriginal(m);
 
   pintarCabecera(m);
   pintarKpis(m);
@@ -209,7 +240,7 @@ async function seleccionar(id) {
   $("#cargando-mapa").classList.add("oculto");
 
   cargarComparacion();
-  Promise.all(TODAS_LAS_CAPAS.map(n => capaDatos(id, n))).then(() => { if (tok === S.token) actualizarInspector(); }).catch(() => {});
+  Promise.all(TODAS_LAS_CAPAS.map(n => capaDatos(id, n))).then(() => { if (tok === S.token) { actualizarInspector(); graficaInundacion(m); programarGraficas(); actualizarControlNivel(m); } }).catch(() => {});
   limpiarCache();
 }
 
@@ -313,7 +344,12 @@ function pintarLeyenda() {
   const comp = S.compararCon ? S.comp.get(`${S.compararCon}-${S.actual}`) : null;
   const info = {
     relieve: ["Relieve", `Altura del terreno. Las líneas son curvas de nivel cada ${nf(m.curvas.intervalo)} m; las gruesas, cada ${nf(m.curvas.intervalo * 5)} m.`,
-      grad(RAMPA.relieve, `${nf(k.zmin)} m`, `${nf(k.zmax)} m`)],
+      grad(RAMPA.relieve, `${nf(k.zmin)} m`, `${nf(k.zmax)} m`) + `
+      <div class="perfil-mini">
+        <div class="perfil-mini-cab"><b>Perfil de A a B</b><button class="btn-link" id="linea-reset" ${S.linea && S.linea.propia ? "" : "hidden"}>Volver a la línea original</button></div>
+        <div class="grafica" id="g-perfil-mini"></div>
+        <p class="ayuda">Arrastra los puntos <b>A</b> y <b>B</b> en el mapa para cambiar el corte. Toca la gráfica para marcar un punto.</p>
+      </div>`],
     pendiente: ["Pendiente", "Qué tan inclinada es cada ladera. Arriba de unos 30–35° la arena seca ya no se sostiene.",
       grad(RAMPA.pendiente, "0°", "45° o más")],
     riesgo_seco: ["Riesgo de deslave en seco", "Factor de seguridad (FS): compara lo que sostiene al suelo contra lo que lo jala ladera abajo. Con FS menor a 1, la ladera falla.",
@@ -323,20 +359,72 @@ function pintarLeyenda() {
     drenaje: ["Drenaje y cuencas", "Hacia dónde escurre el agua de lluvia. Cada color es una cuenca (el área que drena a un mismo río); las líneas azules son los ríos.",
       `<div class="leyenda-clases">${m.cuencas.slice(0, 4).map((c, i) => `<div><i style="background:${CUENCAS[i]}"></i>Cuenca ${c.n}<span class="lc-pct">${fmtArea(c.area)}</span></div>`).join("")}
        <div><i style="background:#0b4f9c"></i>Ríos<span class="lc-pct">${fmtLen(k.long_rios)}</span></div></div>`],
-    inundacion: ["Zonas inundables", `Zonas que quedan bajo el agua si los ríos suben ${nf(k.nivel, 1)} m, más el agua que se estanca en hundimientos (método HAND).`,
-      grad(RAMPA.agua, "poca agua", "más profundo")],
+    inundacion: ["Zonas inundables", "Zonas que quedan bajo el agua si los ríos suben, más el agua que se estanca en hundimientos (método HAND).",
+      controlNivel(m) + grad(RAMPA.agua, "poca agua", "más profundo")],
     cambios: ["Cambios entre capturas", comp && !comp.error ? `Diferencia contra la captura #${S.compararCon}. Rojo: se perdió arena. Azul: se acumuló. Las flechas marcan los deslaves detectados.` : "Se necesita otra captura para comparar.",
       comp && !comp.error ? grad(RAMPA.cambios, `−${nf(comp.max_abs, 1)} m`, `+${nf(comp.max_abs, 1)} m`) : ""],
   }[S.capa];
   $("#capa-titulo").textContent = info[0];
   $("#capa-desc").textContent = info[1];
   $("#leyenda").innerHTML = info[2];
+  const sl = $("#nivel");
+  if (sl) {
+    sl.oninput = e => ponerNivel(+e.target.value);
+    $("#nivel-reset").onclick = () => ponerNivel(null);
+  }
+  const mini = $("#g-perfil-mini");
+  if (mini) {
+    graficaPerfil(m, mini, true);
+    $("#linea-reset").onclick = () => { S.linea = lineaOriginal(m); S.perfilFijo = null; $("#linea-reset").hidden = true; pedirDibujo(); programarGraficas(); };
+  }
 }
+
+// Control para subir o bajar el agua, junto al mapa de inundación
+function controlNivel(m) {
+  const hmax = m.curva.nivel[m.curva.nivel.length - 1] || 1, nv = nivelActual(m);
+  return `<div class="control-nivel">
+    <label for="nivel">Nivel del agua sobre los ríos</label>
+    <div class="control-nivel-fila"><input type="range" id="nivel" min="0" max="${hmax.toFixed(1)}" step="0.1" value="${nv.toFixed(1)}"><b id="nivel-val">${nf(nv, 1)} m</b></div>
+    <div class="control-nivel-res"><b id="nivel-pct">${nf(pctInundado(m, nv), 1)}%</b> del terreno queda bajo el agua</div>
+    <button class="btn-link" id="nivel-reset" ${S.nivel == null ? "hidden" : ""}>Volver al escenario original (${nf(m.kpis.nivel, 1)} m)</button>
+  </div>`;
+}
+function actualizarControlNivel(m) {
+  const sl = $("#nivel"); if (!sl || !m) return;
+  const nv = nivelActual(m);
+  if (document.activeElement !== sl) sl.value = nv.toFixed(1);
+  $("#nivel-val").textContent = `${nf(nv, 1)} m`;
+  $("#nivel-pct").textContent = `${nf(pctInundado(m, nv), 1)}%`;
+  $("#nivel-reset").hidden = S.nivel == null;
+}
+function ponerNivel(v) {
+  const m = S.meta.get(S.actual); if (!m) return;
+  const nuevo = v == null ? null : Math.round(Math.max(0, v) * 10) / 10;
+  if (nuevo === S.nivel) return;
+  S.nivel = nuevo;
+  for (const k of [...S.imagenes.keys()]) if (k.startsWith(`${S.actual}:inundacion:`)) S.imagenes.delete(k);
+  pedirDibujo(); actualizarInspector(); actualizarControlNivel(m);
+  const g = $("#g-inund"); if (g._marcar) g._marcar(nivelActual(m));
+  programarGraficas();
+}
+const lineaOriginal = m => ({ a: [...m.perfil.a], b: [...m.perfil.b], dims: `${m.filas}x${m.cols}` });
+let graficasPendientes = false;
+function programarGraficas() {
+  if (graficasPendientes) return;
+  graficasPendientes = true;
+  requestAnimationFrame(() => {
+    graficasPendientes = false;
+    const m = S.meta.get(S.actual); if (!m) return;
+    graficaPerfil(m);
+    const mini = $("#g-perfil-mini"); if (mini) graficaPerfil(m, mini, true);
+  });
+}
+const mapaVisible = () => { const r = $("#lienzo-cont").getBoundingClientRect(); return r.bottom > 120 && r.top < innerHeight - 120; };
 
 // ============================== MAPA: IMAGEN ================================
 function construirImagen() {
   const id = S.actual, m = S.meta.get(id);
-  const clave = `${id}:${S.capa}:${S.capa === "cambios" ? S.compararCon : ""}`;
+  const clave = `${id}:${S.capa}:${S.capa === "cambios" ? S.compararCon : S.capa === "inundacion" ? nivelActual(m).toFixed(3) : ""}`;
   if (S.imagenes.has(clave)) return S.imagenes.get(clave);
   const W = m.cols, H = m.filas, n = W * H;
   const sh = capaLista(id, "sombreado");
@@ -351,7 +439,14 @@ function construirImagen() {
   const k = m.kpis, rango = (k.zmax - k.zmin) || 1;
   const comp = cp.comp ? S.comp.get(`${S.compararCon}-${id}`) : null;
   let maxProf = 0;
-  if (S.capa === "inundacion") for (let i = 0; i < n; i++) if (datos[0][i] > maxProf) maxProf = datos[0][i];
+  let prof = null;
+  if (S.capa === "inundacion") {
+    const nv = nivelActual(m); prof = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const p = Math.max(datos[0][i] < nv ? nv - datos[0][i] : 0, datos[1][i] > 0 ? datos[1][i] : 0);
+      prof[i] = p; if (p > maxProf) maxProf = p;
+    }
+  }
   const rios = S.capa === "drenaje" ? datos[1] : null;
   const cuRgb = CUENCAS.map(hex2rgb);
 
@@ -386,7 +481,7 @@ function construirImagen() {
         break;
       }
       case "inundacion": {
-        const p = datos[0][i];
+        const p = prof[i];
         if (p > 0) { const t = Math.min(255, (Math.pow(p / (maxProf || 1), .6) * 255) | 0) * 3; c = [RAMPA.agua[t], RAMPA.agua[t + 1], RAMPA.agua[t + 2]]; a = .9; }
         break;
       }
@@ -472,8 +567,8 @@ function dibujar() {
     ctx.strokeStyle = oscuro + (S.capa === "relieve" ? ".7)" : ".5)"); ctx.lineWidth = 1.6 / e; ctx.stroke(m.rutas.maestra);
   }
   // línea del perfil
-  if (S.capa === "relieve" || S.perfilHover != null) {
-    const [ax, ay] = m.perfil.a, [bx, by] = m.perfil.b;
+  if (S.linea && (S.capa === "relieve" || S.perfilHover != null || S.perfilFijo != null)) {
+    const [ax, ay] = S.linea.a, [bx, by] = S.linea.b;
     ctx.setLineDash([6 / e, 4 / e]);
     ctx.strokeStyle = "rgba(192,57,43,.9)"; ctx.lineWidth = 2 / e;
     ctx.beginPath(); ctx.moveTo(ax + .5, ay + .5); ctx.lineTo(bx + .5, by + .5); ctx.stroke();
@@ -482,6 +577,10 @@ function dibujar() {
     if (S.perfilHover != null) {
       const x = ax + (bx - ax) * S.perfilHover + .5, y = ay + (by - ay) * S.perfilHover + .5;
       punto(x, y, e, "#c0392b");
+    }
+    if (S.perfilFijo != null) {
+      const x = ax + (bx - ax) * S.perfilFijo + .5, y = ay + (by - ay) * S.perfilFijo + .5;
+      punto(x, y, e, "#2a6146", 8);
     }
   }
   // flechas de deslaves
@@ -502,14 +601,15 @@ function dibujar() {
 }
 function etiquetaMapa(txt, x, y, e) {
   ctx.save(); ctx.translate(x, y); ctx.scale(1 / e, 1 / e);
-  ctx.fillStyle = "#c0392b"; ctx.beginPath(); ctx.arc(0, 0, 10, 0, 7); ctx.fill();
-  ctx.fillStyle = "#fff"; ctx.font = "800 11px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "#c0392b"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(0, 0, 12, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.font = "800 12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText(txt, 0, 1); ctx.restore();
 }
-function punto(x, y, e, color) {
+function punto(x, y, e, color, radio = 6) {
   ctx.save(); ctx.translate(x, y); ctx.scale(1 / e, 1 / e);
   ctx.fillStyle = color; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5;
-  ctx.beginPath(); ctx.arc(0, 0, 6, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+  ctx.beginPath(); ctx.arc(0, 0, radio, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
 }
 function flecha(x0, y0, x1, y1, e, n) {
   ctx.save(); ctx.scale(1 / e, 1 / e);
@@ -539,11 +639,31 @@ function barraEscala(m) {
 
 // ============================== MAPA: INTERACCIÓN ===========================
 const punteros = new Map();
-let arrastre = null, pinza = null;
+let arrastre = null, pinza = null, arrastreAB = null;
+// ¿El cursor está sobre el punto A o B? (solo en la pestaña Relieve, donde se ve la línea)
+function manijaCerca([x, y]) {
+  if (S.capa !== "relieve" || !S.linea) return null;
+  const v = S.vista, dist = q => Math.hypot(v.ox + (q[0] + .5) * v.escala - x, v.oy + (q[1] + .5) * v.escala - y);
+  const da = dist(S.linea.a), db = dist(S.linea.b);
+  if (Math.min(da, db) > 22) return null;
+  return da <= db ? "a" : "b";
+}
+function moverManija(cual, [x, y]) {
+  const m = S.meta.get(S.actual); if (!m) return;
+  S.linea[cual] = [
+    Math.max(0, Math.min(m.cols - 1, (x - S.vista.ox) / S.vista.escala - .5)),
+    Math.max(0, Math.min(m.filas - 1, (y - S.vista.oy) / S.vista.escala - .5)),
+  ];
+  S.linea.propia = true; S.perfilFijo = null;
+  const r = $("#linea-reset"); if (r) r.hidden = false;
+  pedirDibujo(); programarGraficas();
+}
 const pos = ev => { const r = lienzo.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
 lienzo.addEventListener("pointerdown", ev => {
   lienzo.setPointerCapture(ev.pointerId);
+  const manija = punteros.size === 0 ? manijaCerca(pos(ev)) : null;
   punteros.set(ev.pointerId, pos(ev));
+  if (manija) { arrastreAB = manija; arrastre = null; $("#lienzo-cont").classList.add("arrastrando"); return; }
   if (punteros.size === 1) arrastre = { inicio: pos(ev), ox: S.vista.ox, oy: S.vista.oy, movio: false };
   if (punteros.size === 2) {
     const [a, b] = [...punteros.values()];
@@ -554,6 +674,7 @@ lienzo.addEventListener("pointerdown", ev => {
 lienzo.addEventListener("pointermove", ev => {
   const p = pos(ev);
   if (punteros.has(ev.pointerId)) punteros.set(ev.pointerId, p);
+  if (arrastreAB && punteros.has(ev.pointerId)) { moverManija(arrastreAB, p); return; }
   if (pinza && punteros.size === 2) {
     const [a, b] = [...punteros.values()];
     const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -569,14 +690,14 @@ lienzo.addEventListener("pointermove", ev => {
       return;
     }
   }
-  if (ev.pointerType === "mouse") ponerHover(p);
+  if (ev.pointerType === "mouse") { ponerHover(p); lienzo.style.cursor = manijaCerca(p) ? "grab" : ""; }
 });
 const soltar = ev => {
   const p = pos(ev);
   if (arrastre && !arrastre.movio) ponerHover(p);
   punteros.delete(ev.pointerId);
   if (punteros.size < 2) pinza = null;
-  if (punteros.size === 0) arrastre = null;
+  if (punteros.size === 0) { arrastre = null; arrastreAB = null; }
   $("#lienzo-cont").classList.remove("arrastrando");
 };
 lienzo.addEventListener("pointerup", soltar);
@@ -621,7 +742,7 @@ function actualizarInspector() {
   const x = m.origen[0] + (c + .5) * m.celda, y = m.origen[1] + (m.filas - r - .5) * m.celda;
   const fila = (dt, dd) => `<dt>${dt}</dt><dd>${dd}</dd>`;
   const fsTxt = f => { if (f === undefined) return "…"; const cl = claseFS(f); return `<i style="background:${rgb(cl.color)}"></i>${cl.nombre} <span class="sutil">FS ${nf(f, 2)}</span>`; };
-  const pend = v("pendiente"), ori = cardinal(v("orientacion")), prof = v("inundacion"), cu = v("cuencas");
+  const pend = v("pendiente"), ori = cardinal(v("orientacion")), prof = profundidad(id, i, nivelActual(m)), cu = v("cuencas");
   let html = fila("Coordenadas", `<span class="sutil">X</span> ${nf(x)} <span class="sutil">Y</span> ${nf(y)}`)
     + fila("Elevación", `${nf(v("elevacion"), 1)} m`)
     + fila("Pendiente", pend === undefined ? "…" : `${nf(pend, 1)}°${ori && pend > 1 ? ` <span class="sutil">hacia el ${ori}</span>` : ""}`)
@@ -665,42 +786,90 @@ function tooltip(cont) {
   return t;
 }
 
-function graficaPerfil(m) {
-  const cont = $("#g-perfil"); cont.innerHTML = "";
-  const p = m.perfil, n = p.dist.length;
-  $("#perfil-sub").textContent = `A → B · ${fmtLen(m.kpis.perfil_long)} · desnivel ${nf(m.kpis.perfil_desnivel)} m`;
-  const W = Math.max(300, cont.clientWidth || 480), H = W < 420 ? 240 : 230, M = { l: 66, r: 12, t: 30, b: 40 };
-  const zmin = Math.min(...p.elev), zmax = Math.max(...p.agua, ...p.elev), marg = (zmax - zmin) * .08 || 1;
+// Perfil calculado en la página con la línea A–B actual (se puede mover en el mapa).
+function calcPerfil(m) {
+  const id = m.id, z = capaLista(id, "elevacion");
+  if (!z || !S.linea) return null;
+  const W = m.cols, H = m.filas, [ax, ay] = S.linea.a, [bx, by] = S.linea.b;
+  const n = Math.max(2, Math.min(500, Math.round(Math.hypot(bx - ax, by - ay)) + 1));
+  const fs = capaLista(id, "fs_lluvia"), nivel = nivelActual(m);
+  const p = { dist: [], elev: [], agua: [], inestable: [] };
+  let ult = NaN;
+  for (let k = 0; k < n; k++) {
+    const t = k / (n - 1), x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+    const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(W - 1, x0 + 1), y1 = Math.min(H - 1, y0 + 1);
+    const fx = x - x0, fy = y - y0, g = (c, r) => z[r * W + c];
+    let v = g(x0, y0) * (1 - fx) * (1 - fy) + g(x1, y0) * fx * (1 - fy) + g(x0, y1) * (1 - fx) * fy + g(x1, y1) * fx * fy;
+    const i = Math.round(y) * W + Math.round(x);
+    if (isNaN(v)) v = z[i];
+    if (isNaN(v)) v = isNaN(ult) ? m.kpis.zmin : ult;
+    ult = v;
+    p.dist.push(Math.hypot(x - ax, y - ay) * m.celda);
+    p.elev.push(v);
+    p.agua.push(v + (profundidad(id, i, nivel) || 0));
+    p.inestable.push(fs ? fs[i] < 1 : false);
+  }
+  return p;
+}
+
+function fijarPuntoPerfil(frac, dist, avisar) {
+  if (!S.linea) return;
+  const [ax, ay] = S.linea.a, [bx, by] = S.linea.b;
+  S.perfilFijo = frac;
+  S.hover = { c: Math.round(ax + (bx - ax) * frac), r: Math.round(ay + (by - ay) * frac) };
+  actualizarInspector(); pedirDibujo();
+  if (avisar && !mapaVisible())
+    aviso(`<b>Punto marcado en el mapa</b><small>A ${fmtLen(dist)} del punto A. Sus datos aparecen junto al mapa.</small>`, { boton: "Ver en el mapa", accion: irAlMapa });
+}
+
+function graficaPerfil(m, cont = $("#g-perfil"), mini = false) {
+  cont.innerHTML = "";
+  const p = calcPerfil(m) || m.perfil, n = p.dist.length;
+  const zmin = Math.min(...p.elev), zmaxT = Math.max(...p.elev);
+  if (!mini) $("#perfil-sub").textContent = `A → B · ${fmtLen(p.dist[n - 1])} · desnivel ${nf(zmaxT - zmin)} m`;
+  const W = Math.max(mini ? 220 : 300, cont.clientWidth || 480), H = mini ? 150 : (W < 420 ? 240 : 230);
+  const M = mini ? { l: 42, r: 8, t: 24, b: 22 } : { l: 66, r: 12, t: 30, b: 40 };
+  const zmax = Math.max(...p.agua, zmaxT), marg = (zmax - zmin) * .08 || 1;
   const y0 = zmin - marg, y1 = zmax + marg, dmax = p.dist[n - 1] || 1;
   const X = d => M.l + d / dmax * (W - M.l - M.r), Y = z => H - M.b - (z - y0) / (y1 - y0) * (H - M.t - M.b);
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Perfil topográfico" }, cont);
-  const defs = el("defs", {}, svg);
-  const gr = el("linearGradient", { id: "gArena", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+  const idGr = mini ? "gArenaMini" : "gArena";
+  const gr = el("linearGradient", { id: idGr, x1: 0, y1: 0, x2: 0, y2: 1 }, el("defs", {}, svg));
   el("stop", { offset: "0", "stop-color": "#d8b884" }, gr); el("stop", { offset: "1", "stop-color": "#a98557" }, gr);
-  ejes(svg, W, H, M, X, Y, marcas(0, dmax, 6), marcas(y0, y1, 4), "Distancia (m)", "Elevación (m)");
+  ejes(svg, W, H, M, X, Y, marcas(0, dmax, mini ? 3 : 6), marcas(y0, y1, mini ? 3 : 4), mini ? "" : "Distancia (m)", mini ? "" : "Elevación (m)");
   const base = Y(y0);
   let dT = `M${X(0)},${base}`; p.elev.forEach((z, i) => dT += `L${X(p.dist[i]).toFixed(1)},${Y(z).toFixed(1)}`); dT += `L${X(dmax)},${base}Z`;
   let dA = ""; p.agua.forEach((z, i) => dA += `${i ? "L" : "M"}${X(p.dist[i]).toFixed(1)},${Y(z).toFixed(1)}`);
   for (let i = n - 1; i >= 0; i--) dA += `L${X(p.dist[i]).toFixed(1)},${Y(p.elev[i]).toFixed(1)}`;
   el("path", { d: dA + "Z", fill: "var(--agua)", opacity: .85 }, svg);
-  el("path", { d: dT, fill: "url(#gArena)" }, svg);
+  el("path", { d: dT, fill: `url(#${idGr})` }, svg);
   let dL = ""; p.elev.forEach((z, i) => dL += `${i ? "L" : "M"}${X(p.dist[i]).toFixed(1)},${Y(z).toFixed(1)}`);
   el("path", { d: dL, fill: "none", stroke: "#5b4630", "stroke-width": 1.4 }, svg);
   let dR = "", abierto = false;
   p.elev.forEach((z, i) => { if (p.inestable[i]) { dR += `${abierto ? "L" : "M"}${X(p.dist[i]).toFixed(1)},${Y(z).toFixed(1)}`; abierto = true; } else abierto = false; });
-  el("path", { d: dR, fill: "none", stroke: "var(--riesgo)", "stroke-width": 4, "stroke-linecap": "round" }, svg);
+  el("path", { d: dR, fill: "none", stroke: "var(--riesgo)", "stroke-width": mini ? 3 : 4, "stroke-linecap": "round" }, svg);
   for (const [txt, d] of [["A", 0], ["B", dmax]]) {
     el("circle", { cx: X(d), cy: 11, r: 9, fill: "#c0392b" }, svg);
     el("text", { x: X(d), y: 15, "text-anchor": "middle", fill: "#fff", "font-size": 11, "font-weight": 800 }, svg).textContent = txt;
   }
+  // punto marcado (se queda fijo en el mapa)
+  if (S.perfilFijo != null) {
+    const i = Math.round(S.perfilFijo * (n - 1));
+    el("line", { x1: X(p.dist[i]), x2: X(p.dist[i]), y1: M.t, y2: H - M.b, stroke: "#2a6146", "stroke-width": 1.5 }, svg);
+    el("circle", { cx: X(p.dist[i]), cy: Y(p.elev[i]), r: 5.5, fill: "#2a6146", stroke: "#fff", "stroke-width": 2 }, svg);
+  }
   const guia = el("line", { y1: M.t, y2: H - M.b, stroke: "var(--texto)", "stroke-width": 1, opacity: 0, "stroke-dasharray": "3 3" }, svg);
   const pt = el("circle", { r: 4.5, fill: "#c0392b", stroke: "#fff", "stroke-width": 2, opacity: 0 }, svg);
   const tip = tooltip(cont);
-  const area = el("rect", { x: M.l, y: M.t, width: W - M.l - M.r, height: H - M.t - M.b, fill: "transparent" }, svg);
-  area.addEventListener("pointermove", ev => {
+  const area = el("rect", { x: M.l, y: M.t, width: W - M.l - M.r, height: H - M.t - M.b, fill: "transparent", style: "cursor:pointer" }, svg);
+  const indice = ev => {
     const r = svg.getBoundingClientRect(), fx = (ev.clientX - r.left) / r.width * W;
     const d = Math.max(0, Math.min(dmax, (fx - M.l) / (W - M.l - M.r) * dmax));
     let i = 0; while (i < n - 1 && p.dist[i] < d) i++;
+    return i;
+  };
+  area.addEventListener("pointermove", ev => {
+    const i = indice(ev), r = svg.getBoundingClientRect();
     guia.setAttribute("x1", X(p.dist[i])); guia.setAttribute("x2", X(p.dist[i])); guia.setAttribute("opacity", .5);
     pt.setAttribute("cx", X(p.dist[i])); pt.setAttribute("cy", Y(p.elev[i])); pt.setAttribute("opacity", 1);
     const agua = p.agua[i] - p.elev[i];
@@ -709,6 +878,11 @@ function graficaPerfil(m) {
     S.perfilHover = p.dist[i] / dmax; pedirDibujo();
   });
   area.addEventListener("pointerleave", () => { guia.setAttribute("opacity", 0); pt.setAttribute("opacity", 0); tip.style.opacity = 0; S.perfilHover = null; pedirDibujo(); });
+  area.addEventListener("click", ev => {
+    const i = indice(ev);
+    fijarPuntoPerfil(p.dist[i] / dmax, p.dist[i], !mini);
+    programarGraficas();
+  });
 }
 
 function graficaInundacion(m) {
@@ -718,32 +892,55 @@ function graficaInundacion(m) {
   const hmax = h[n - 1] || 1, amax = Math.min(100, Math.max(...a) * 1.12 || 1);
   const X = v => M.l + v / hmax * (W - M.l - M.r), Y = v => H - M.b - v / amax * (H - M.t - M.b);
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Curva de inundación" }, cont);
-  const defs = el("defs", {}, svg);
-  const gr = el("linearGradient", { id: "gAgua", x1: 0, y1: 0, x2: 0, y2: 1 }, defs);
+  const gr = el("linearGradient", { id: "gAgua", x1: 0, y1: 0, x2: 0, y2: 1 }, el("defs", {}, svg));
   el("stop", { offset: "0", "stop-color": "var(--agua)", "stop-opacity": .35 }, gr); el("stop", { offset: "1", "stop-color": "var(--agua)", "stop-opacity": .03 }, gr);
   ejes(svg, W, H, M, X, Y, marcas(0, hmax, 6), marcas(0, amax, 4), "Nivel del agua sobre los ríos (m)", "Área inundada (%)", v => nf(v), v => `${nf(v)}%`);
   let d = ""; h.forEach((v, i) => d += `${i ? "L" : "M"}${X(v).toFixed(1)},${Y(a[i]).toFixed(1)}`);
   el("path", { d: `${d}L${X(hmax)},${Y(0)}L${X(0)},${Y(0)}Z`, fill: "url(#gAgua)" }, svg);
   el("path", { d, fill: "none", stroke: "var(--agua)", "stroke-width": 2.5, "stroke-linejoin": "round" }, svg);
-  const nivel = m.kpis.nivel, pct = m.kpis.inund_pct;
-  el("line", { x1: X(nivel), x2: X(nivel), y1: M.t, y2: H - M.b, stroke: "var(--riesgo)", "stroke-dasharray": "4 4", "stroke-width": 1.5 }, svg);
-  el("circle", { cx: X(nivel), cy: Y(pct), r: 5, fill: "var(--riesgo)", stroke: "#fff", "stroke-width": 2 }, svg);
-  const der = X(nivel) > W * .6;
-  const etq = el("text", { x: X(nivel) + (der ? -8 : 8), y: M.t - 10, "text-anchor": der ? "end" : "start", "font-size": 12.5, "font-weight": 700, fill: "var(--riesgo)" }, svg);
-  etq.textContent = `Escenario del mapa: ${nf(nivel, 1)} m → ${nf(pct, 1)}%`;
+  // escenario original del análisis (referencia tenue)
+  el("line", { x1: X(m.kpis.nivel), x2: X(m.kpis.nivel), y1: M.t, y2: H - M.b, stroke: "var(--texto-3)", "stroke-dasharray": "2 4", "stroke-width": 1 }, svg);
+  // escenario que se ve en el mapa (se mueve)
+  const marca = el("line", { y1: M.t, y2: H - M.b, stroke: "var(--riesgo)", "stroke-dasharray": "4 4", "stroke-width": 1.5 }, svg);
+  const circ = el("circle", { r: 6, fill: "var(--riesgo)", stroke: "#fff", "stroke-width": 2 }, svg);
+  const etq = el("text", { y: M.t - 10, "font-size": 12.5, "font-weight": 700, fill: "var(--riesgo)" }, svg);
+  const marcar = nv => {
+    const pct = pctInundado(m, nv), x = X(Math.min(nv, hmax)), der = x > W * .6;
+    marca.setAttribute("x1", x); marca.setAttribute("x2", x);
+    circ.setAttribute("cx", x); circ.setAttribute("cy", Y(pct));
+    etq.setAttribute("x", x + (der ? -8 : 8)); etq.setAttribute("text-anchor", der ? "end" : "start");
+    etq.textContent = `En el mapa: ${nf(nv, 1)} m → ${nf(pct, 1)}%`;
+  };
+  marcar(nivelActual(m));
+  cont._marcar = marcar;
   const guia = el("line", { y1: M.t, y2: H - M.b, stroke: "var(--texto)", opacity: 0, "stroke-dasharray": "3 3" }, svg);
   const pt = el("circle", { r: 4.5, fill: "var(--agua)", stroke: "#fff", "stroke-width": 2, opacity: 0 }, svg);
   const tip = tooltip(cont);
-  const area = el("rect", { x: M.l, y: M.t, width: W - M.l - M.r, height: H - M.t - M.b, fill: "transparent" }, svg);
+  const area = el("rect", { x: M.l, y: M.t, width: W - M.l - M.r, height: H - M.t - M.b, fill: "transparent", style: "cursor:pointer;touch-action:pan-y" }, svg);
+  const valor = ev => { const r = svg.getBoundingClientRect(), fx = (ev.clientX - r.left) / r.width * W; return Math.max(0, Math.min(hmax, (fx - M.l) / (W - M.l - M.r) * hmax)); };
+  let arrastrando = false;
+  area.addEventListener("pointerdown", ev => {
+    arrastrando = true; area.setPointerCapture(ev.pointerId);
+    if (S.capa !== "inundacion") elegirCapa("inundacion");
+    ponerNivel(valor(ev));
+  });
   area.addEventListener("pointermove", ev => {
-    const r = svg.getBoundingClientRect(), fx = (ev.clientX - r.left) / r.width * W;
-    const v = Math.max(0, Math.min(hmax, (fx - M.l) / (W - M.l - M.r) * hmax));
+    if (arrastrando) ponerNivel(valor(ev));
+    const v = valor(ev), r = svg.getBoundingClientRect();
     let i = 0; while (i < n - 1 && h[i] < v) i++;
     guia.setAttribute("x1", X(h[i])); guia.setAttribute("x2", X(h[i])); guia.setAttribute("opacity", .5);
     pt.setAttribute("cx", X(h[i])); pt.setAttribute("cy", Y(a[i])); pt.setAttribute("opacity", 1);
-    tip.textContent = `Si sube ${nf(h[i], 1)} m → ${nf(a[i], 1)}% inundado`;
+    tip.textContent = `Si sube ${nf(h[i], 1)} m → ${nf(a[i], 1)}% inundado · toca para verlo en el mapa`;
     tip.style.left = `${X(h[i]) / W * r.width}px`; tip.style.top = `${Y(a[i]) / H * r.height}px`; tip.style.opacity = 1;
   });
+  const terminar = () => {
+    if (!arrastrando) return;
+    arrastrando = false;
+    if (!mapaVisible())
+      aviso(`<b>Nivel del agua: ${nf(nivelActual(m), 1)} m</b><small>El mapa de inundación ya muestra este escenario.</small>`, { boton: "Ver en el mapa", accion: irAlMapa });
+  };
+  area.addEventListener("pointerup", terminar);
+  area.addEventListener("pointercancel", () => { arrastrando = false; });
   area.addEventListener("pointerleave", () => { guia.setAttribute("opacity", 0); pt.setAttribute("opacity", 0); tip.style.opacity = 0; });
 }
 

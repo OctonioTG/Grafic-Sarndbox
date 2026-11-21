@@ -441,3 +441,19 @@ svg { display: block; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ===== Controles interactivos junto al mapa ===== */
+.btn-link { background: none; border: 0; padding: 4px 0; color: var(--pri); font-weight: 650; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.btn-link:hover { color: var(--pri-2); }
+.control-nivel { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.control-nivel label { font-size: 13px; font-weight: 650; color: var(--texto-2); }
+.control-nivel-fila { display: flex; align-items: center; gap: 12px; }
+.control-nivel-fila b { font-size: 18px; font-variant-numeric: tabular-nums; min-width: 60px; text-align: right; }
+.control-nivel input[type="range"] { flex: 1; accent-color: var(--agua); height: 28px; cursor: pointer; }
+.control-nivel-res { font-size: 13.5px; color: var(--texto-2); }
+.control-nivel-res b { color: var(--agua); font-size: 15px; }
+.control-nivel .btn-link { align-self: flex-start; }
+.perfil-mini { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--borde); }
+.perfil-mini-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.perfil-mini .grafica { margin-top: 6px; }
+.ayuda { margin: 6px 0 0; font-size: 12.5px; color: var(--texto-3); }
