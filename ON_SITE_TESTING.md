@@ -28,7 +28,7 @@ The configuration variables keep their Spanish names (they are what you edit in 
 | V9 | The SARndbox window title, and that xdotool moves it to the projector and triggers F11 | `TITULO_VENTANA`, `METODO_PANTALLA_COMPLETA` | 3 |
 | V10 | That the address window and the browser open on the main screen, not the projector | `MOSTRAR_DIRECCION`, `ABRIR_NAVEGADOR` | 5 |
 | V11 | That the icon is marked as trusted (double click with no questions) | — | 2 |
-| V12 | Whether the computer can handle the water (speed, smoothness) | `AGUA_VELOCIDAD`, `AGUA_PASOS_MAXIMOS` | 3 |
+| V12 | Whether the computer can handle the water (speed, smoothness) | `CALIDAD_AGUA` (alta / media / ligera) | 3 |
 
 ---
 
@@ -147,7 +147,7 @@ Open a Terminal. Copy each command, paste it with `Ctrl+Shift+V`, and write down
   - If the window moves but does not go full screen: click the window and press `F11`. Also try `METODO_PANTALLA_COMPLETA="vrui"`.
 - [ ] **Correct calibration:** the colors and contour lines must match the real sand, as before. If they are shifted, the window did not end up exactly full screen on the projector. **Do not recalibrate**: check V5 and V9 first.
 - [ ] **Water:** hold an open hand over the sand for a few seconds. Blue water should "rain" and flow downhill. (In SARndbox 2.6 water is on while the speed is above 0; the launcher uses `-ws 1.0 30`.)
-- [ ] **V12:** if the sandbox runs very slowly with water, try `AGUA_VELOCIDAD="0.5"` and `AGUA_PASOS_MAXIMOS="20"`. Do not use 0: without water the terrain cannot be saved.
+- [ ] **V12:** start with `CALIDAD_AGUA="media"`. If the water looks smooth, try `"alta"`; if it stutters, `"ligera"`. Also check the log in `logs/`: if it says the water simulation cannot keep up in real time, go one level down. Confirm the save key still works at each level (the saved terrain has the size of the water grid). Never set `AGUA_VELOCIDAD="0"`: without water the terrain cannot be saved.
 
 ---
 
@@ -211,6 +211,7 @@ Write down which one worked: ______________________
   ```
 
   This should print nothing either.
+- [ ] In the panel, open Settings (gear button): switch to Español, change the soil type to "Loose sand" and save. The numbers should change on every connected device. On a phone, scale and soil should appear locked. At the end, press "Restore defaults" and save.
 - [ ] Open the icon again. It should start normally, with no "ya está abierto" (already open) or "puerto ocupado" (port in use) message.
 - [ ] With the sandbox open, double-click the icon again. It should say it is **already open** and not start a second copy.
 

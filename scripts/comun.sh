@@ -56,10 +56,11 @@ cargar_config() {
     # Valores por defecto (por si alguien borra una línea del archivo)
     SARNDBOX_EJECUTABLE=""; ARCHIVO_BOXLAYOUT=""; ARCHIVO_PROYECTOR=""
     OPCIONES_SARNDBOX="-uhm"; AGUA_VELOCIDAD="1.0"; AGUA_PASOS_MAXIMOS="30"
+    CALIDAD_AGUA="media"; AGUA_MALLA="640 480"
     RUTA_DEM="$HOME/SARndbox-capturas/BathymetrySaverTool.dem"; TECLA_GUARDAR="g"
     METODO_CONFIG_VRUI="mergeConfig"; VRUI_VERSION=""; SECCION_RAIZ_VRUI="Desktop"
     VRUI_OPCIONES_EXTRA=""; MONITOR_PROYECTOR="auto"; METODO_PANTALLA_COMPLETA="xdotool"
-    TITULO_VENTANA="SARndbox"; PUERTO="8000"; ESCALA_METROS_POR_CM=""
+    TITULO_VENTANA="SARndbox"; PUERTO="8000"; ESCALA_METROS_POR_CM=""; AJUSTES_DESDE_OTROS_EQUIPOS="no"
     ABRIR_NAVEGADOR="si"; MOSTRAR_DIRECCION="si"; SIMULACION_CADA="20"; SIMULACION_DURACION="0"
 
     if [ ! -f "$ARCHIVO_CONF" ]; then
@@ -254,4 +255,24 @@ detener_proceso() {
         kill -KILL "$pid" 2>/dev/null
     fi
     wait "$pid" 2>/dev/null || true
+}
+
+# Traduce CALIDAD_AGUA a tamaño de malla y pasos máximos.
+# Deja el resultado en AGUA_MALLA_ANCHO, AGUA_MALLA_ALTO y AGUA_PASOS. Devuelve 1 si el valor no es válido.
+parametros_agua() {
+    case "$CALIDAD_AGUA" in
+        alta)   AGUA_MALLA_ANCHO=640; AGUA_MALLA_ALTO=480; AGUA_PASOS=30 ;;
+        media)  AGUA_MALLA_ANCHO=480; AGUA_MALLA_ALTO=360; AGUA_PASOS=20 ;;
+        ligera) AGUA_MALLA_ANCHO=320; AGUA_MALLA_ALTO=240; AGUA_PASOS=12 ;;
+        manual)
+            # shellcheck disable=SC2086
+            set -- $AGUA_MALLA
+            AGUA_MALLA_ANCHO="$1"; AGUA_MALLA_ALTO="$2"; AGUA_PASOS="$AGUA_PASOS_MAXIMOS"
+            ;;
+        *) return 1 ;;
+    esac
+    case "$AGUA_MALLA_ANCHO$AGUA_MALLA_ALTO$AGUA_PASOS" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    [ "$AGUA_MALLA_ANCHO" -ge 64 ] && [ "$AGUA_MALLA_ALTO" -ge 48 ] && [ "$AGUA_PASOS" -ge 2 ]
 }

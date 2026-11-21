@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sandbox · Análisis de terreno</title>
+  <title>Sandbox · Terrain analysis</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230e6b5c'/%3E%3Cpath d='M5 22c4-1 5-8 9-8s4 6 7 6 4-4 6-5' stroke='%23fff' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -12,41 +12,44 @@
     <div class="marca">
       <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M5 22c4-1 5-8 9-8s4 6 7 6 4-4 6-5"/><path d="M5 26c4-.5 6-4 10-4s5 3 8 3 3-1.5 4-2" opacity=".55"/></svg>
       <div>
-        <div class="marca-titulo">Sandbox Terreno</div>
-        <div class="marca-sub">Análisis geológico en vivo</div>
+        <div class="marca-titulo" data-en="Sandbox Terrain">Sandbox Terreno</div>
+        <div class="marca-sub" data-en="Live geologic analysis">Análisis geológico en vivo</div>
       </div>
     </div>
     <div class="barra-acciones">
-      <div class="estado" id="estado" data-tipo="conectando"><span class="punto"></span><span id="estado-texto">Conectando…</span></div>
-      <button class="btn btn-sec" id="btn-conectar" title="Ver desde otra computadora o celular">
+      <div class="estado" id="estado" data-tipo="conectando"><span class="punto"></span><span id="estado-texto" data-en="Connecting…">Conectando…</span></div>
+      <button class="btn btn-sec" id="btn-conectar" title="Ver desde otra computadora o celular" data-en-title="View from another computer or phone">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM14 18h2M18 14h3"/></svg>
-        <span>Conectar dispositivo</span>
+        <span data-en="Connect device">Conectar dispositivo</span>
       </button>
       <a class="btn btn-pri" id="btn-descargar" href="#" download aria-disabled="true">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
-        <span>Descargar datos</span>
+        <span data-en="Download data">Descargar datos</span>
       </a>
+      <button class="btn btn-sec btn-icono" id="btn-ajustes" title="Configuración: idioma, escala y suelo" data-en-title="Settings: language, scale and soil" aria-label="Configuración" data-en-aria="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
     </div>
   </header>
 
-  <!-- Franja morada: resumen, números principales y capturas -->
+  <!-- Franja de arriba: resumen, números principales y capturas -->
   <section class="portada" id="portada" hidden>
     <div class="portada-int">
       <div class="cabecera">
         <div class="cabecera-meta" id="cab-meta"></div>
-        <h1 id="cab-titulo">Captura</h1>
+        <h1 id="cab-titulo" data-en="Capture">Captura</h1>
         <p class="frase" id="frase"></p>
         <div class="alertas" id="alertas"></div>
       </div>
       <div class="kpis" id="kpis"></div>
     </div>
-    <div class="tira" aria-label="Historial de capturas">
+    <div class="tira" aria-label="Historial de capturas" data-en-aria="Capture history">
       <div class="tira-cab">
-        <h2>Capturas</h2>
-        <label class="interruptor" title="Mostrar automáticamente cada captura nueva">
+        <h2 data-en="Captures">Capturas</h2>
+        <label class="interruptor" title="Mostrar automáticamente cada captura nueva" data-en-title="Show each new capture automatically">
           <input type="checkbox" id="seguir" checked>
           <span class="interruptor-pista"><span class="interruptor-bola"></span></span>
-          <span>Seguir en vivo</span>
+          <span data-en="Follow live">Seguir en vivo</span>
         </label>
       </div>
       <ol class="historial-lista" id="historial"></ol>
@@ -60,12 +63,12 @@
         <div class="vacio-ilustracion" aria-hidden="true">
           <svg viewBox="0 0 220 120"><path d="M10 95c30-4 38-50 70-50s34 38 58 38 30-22 72-26" class="v1"/><path d="M10 108c34-3 46-24 78-24s38 18 60 18 36-10 62-12" class="v2"/><circle cx="80" cy="45" r="4" class="v3"/></svg>
         </div>
-        <h1>Esperando la primera captura</h1>
-        <p>El panel se actualiza solo en cuanto el SARndbox guarde el relieve.</p>
+        <h1 data-en="Waiting for the first capture">Esperando la primera captura</h1>
+        <p data-en="The panel updates by itself as soon as the SARndbox saves the terrain.">El panel se actualiza solo en cuanto el SARndbox guarde el relieve.</p>
         <ol class="pasos">
-          <li><b>Moldea</b> el terreno en la arena.</li>
-          <li><b>Presiona la tecla</b> de guardado en el SARndbox.</li>
-          <li><b>Listo:</b> el análisis aparece aquí y en todos los dispositivos conectados.</li>
+          <li data-en="&lt;b&gt;Shape&lt;/b&gt; the terrain in the sand."><b>Moldea</b> el terreno en la arena.</li>
+          <li data-en="&lt;b&gt;Press the save key&lt;/b&gt; in the SARndbox."><b>Presiona la tecla</b> de guardado en el SARndbox.</li>
+          <li data-en="&lt;b&gt;Done:&lt;/b&gt; the analysis shows up here and on every connected device."><b>Listo:</b> el análisis aparece aquí y en todos los dispositivos conectados.</li>
         </ol>
       </section>
 
@@ -73,18 +76,18 @@
         <!-- MAPA -->
         <section class="tarjeta mapa-tarjeta">
           <div class="mapa-zona">
-            <div class="capas-tabs" id="capas" role="tablist" aria-label="Capa del mapa"></div>
+            <div class="capas-tabs" id="capas" role="tablist" aria-label="Capa del mapa" data-en-aria="Map layer"></div>
             <div class="lienzo-cont" id="lienzo-cont">
               <canvas id="lienzo"></canvas>
-              <div class="cargando" id="cargando-mapa"><span class="giro"></span>Cargando mapa…</div>
+              <div class="cargando" id="cargando-mapa"><span class="giro"></span><span data-en="Loading map…">Cargando mapa…</span></div>
               <div class="mapa-herr">
-                <button class="herr" id="z-mas" title="Acercar (rueda del mouse)">+</button>
-                <button class="herr" id="z-menos" title="Alejar">−</button>
-                <button class="herr" id="z-ajustar" title="Ajustar a la pantalla (doble clic)">
+                <button class="herr" id="z-mas" title="Acercar (rueda del mouse)" data-en-title="Zoom in (mouse wheel)">+</button>
+                <button class="herr" id="z-menos" title="Alejar" data-en-title="Zoom out">−</button>
+                <button class="herr" id="z-ajustar" title="Ajustar a la pantalla (doble clic)" data-en-title="Fit to screen (double click)">
                   <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
-                <button class="herr activo" id="t-curvas" title="Curvas de nivel" aria-pressed="true">
+                <button class="herr activo" id="t-curvas" title="Curvas de nivel" data-en-title="Contour lines" aria-pressed="true">
                   <svg viewBox="0 0 24 24"><path d="M3 17c4-1 4-9 9-9s5 7 9 6"/><path d="M3 21c5-1 6-5 9-5s5 4 9 4" opacity=".6"/></svg></button>
-                <button class="herr" id="t-pantalla" title="Pantalla completa">
+                <button class="herr" id="t-pantalla" title="Pantalla completa" data-en-title="Full screen">
                   <svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></button>
               </div>
               <div class="escala-barra" id="escala-barra"><span></span><b></b></div>
@@ -98,8 +101,8 @@
               <div class="leyenda" id="leyenda"></div>
             </div>
             <div class="lado-bloque inspector" id="inspector">
-              <h3>Punto en el mapa</h3>
-              <p class="inspector-vacio" id="insp-vacio">Pasa el cursor (o toca) el mapa para ver los datos de cada punto.</p>
+              <h3 data-en="Point on the map">Punto en el mapa</h3>
+              <p class="inspector-vacio" id="insp-vacio" data-en="Hover over (or tap) the map to see the data for each point.">Pasa el cursor (o toca) el mapa para ver los datos de cada punto.</p>
               <dl id="insp-datos" hidden></dl>
             </div>
           </div>
@@ -107,43 +110,43 @@
 
         <div class="rejilla-2">
           <section class="tarjeta">
-            <div class="tarjeta-cab"><h2>Perfil topográfico</h2><span class="sutil" id="perfil-sub"></span></div>
-            <p class="seccion-desc">Cómo se vería el terreno si lo cortaras a lo largo de la línea A–B. En la pestaña Relieve puedes mover A y B en el mapa; toca la gráfica para marcar un punto.</p>
+            <div class="tarjeta-cab"><h2 data-en="Topographic profile">Perfil topográfico</h2><span class="sutil" id="perfil-sub"></span></div>
+            <p class="seccion-desc" data-en="What the terrain would look like if you cut it along the A–B line. In the Relief tab you can move A and B on the map; tap the chart to mark a point.">Cómo se vería el terreno si lo cortaras a lo largo de la línea A–B. En la pestaña Relieve puedes mover A y B en el mapa; toca la gráfica para marcar un punto.</p>
             <div class="grafica" id="g-perfil"></div>
             <div class="grafica-ley">
-              <span><i style="background:var(--arena)"></i>Terreno</span>
-              <span><i style="background:var(--agua)"></i>Agua en inundación</span>
-              <span><i style="background:var(--riesgo)"></i>Ladera inestable con lluvia</span>
+              <span><i style="background:var(--arena)"></i><span data-en="Terrain">Terreno</span></span>
+              <span><i style="background:var(--agua)"></i><span data-en="Flood water">Agua en inundación</span></span>
+              <span><i style="background:var(--riesgo)"></i><span data-en="Unstable slope with rain">Ladera inestable con lluvia</span></span>
             </div>
           </section>
           <section class="tarjeta">
-            <div class="tarjeta-cab"><h2>¿Cuánto se inunda?</h2><span class="sutil">si el agua sube sobre los ríos</span></div>
-            <p class="seccion-desc">Qué parte del terreno queda bajo el agua según cuánto suban los ríos. Toca o arrastra sobre la gráfica para ver ese nivel en el mapa.</p>
+            <div class="tarjeta-cab"><h2 data-en="How much floods?">¿Cuánto se inunda?</h2><span class="sutil" data-en="if water rises above the rivers">si el agua sube sobre los ríos</span></div>
+            <p class="seccion-desc" data-en="How much of the terrain ends up under water depending on how much the rivers rise. Tap or drag on the chart to see that level on the map.">Qué parte del terreno queda bajo el agua según cuánto suban los ríos. Toca o arrastra sobre la gráfica para ver ese nivel en el mapa.</p>
             <div class="grafica" id="g-inund"></div>
           </section>
         </div>
 
         <div class="rejilla-2">
           <section class="tarjeta">
-            <div class="tarjeta-cab"><h2>Estabilidad de laderas</h2><span class="sutil">% del terreno</span></div>
-            <p class="seccion-desc">Qué tan firme está el suelo de las laderas: en seco y empapado por la lluvia.</p>
+            <div class="tarjeta-cab"><h2 data-en="Slope stability">Estabilidad de laderas</h2><span class="sutil" data-en="% of terrain">% del terreno</span></div>
+            <p class="seccion-desc" data-en="How firm the slope soil is: dry and soaked by rain.">Qué tan firme está el suelo de las laderas: en seco y empapado por la lluvia.</p>
             <div id="estabilidad"></div>
           </section>
           <section class="tarjeta">
-            <div class="tarjeta-cab"><h2>Cuencas principales</h2><span class="sutil" id="cuencas-sub"></span></div>
-            <p class="seccion-desc">Zonas donde toda la lluvia escurre hacia el mismo río. Están ordenadas de mayor a menor.</p>
+            <div class="tarjeta-cab"><h2 data-en="Main watersheds">Cuencas principales</h2><span class="sutil" id="cuencas-sub"></span></div>
+            <p class="seccion-desc" data-en="Areas where all the rain drains to the same river, sorted from largest to smallest.">Zonas donde toda la lluvia escurre hacia el mismo río. Están ordenadas de mayor a menor.</p>
             <div id="cuencas"></div>
           </section>
         </div>
 
         <section class="tarjeta" id="sec-cambios">
           <div class="tarjeta-cab">
-            <h2>Cambios y deslaves</h2>
-            <label class="selector">Comparar con
+            <h2 data-en="Changes and landslides">Cambios y deslaves</h2>
+            <label class="selector"><span data-en="Compare with">Comparar con</span>
               <select id="comparar-con"></select>
             </label>
           </div>
-          <p class="seccion-desc">Qué arena se movió entre dos capturas y si el movimiento parece un deslave.</p>
+          <p class="seccion-desc" data-en="Which sand moved between two captures, and whether the movement looks like a landslide.">Qué arena se movió entre dos capturas y si el movimiento parece un deslave.</p>
           <div id="cambios"></div>
         </section>
 
@@ -156,14 +159,79 @@
   <div class="modal" id="modal" hidden>
     <div class="modal-fondo" data-cerrar></div>
     <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
-      <button class="modal-x" data-cerrar aria-label="Cerrar">×</button>
-      <h2 id="modal-titulo">Ver desde otro dispositivo</h2>
-      <p class="sutil">Escanea con la cámara del celular o escribe la dirección en el navegador de otra computadora.</p>
-      <img class="qr" id="qr" alt="Código QR con la dirección del panel">
-      <div class="url-caja"><code id="url-principal"></code><button class="btn btn-sec btn-ch" id="copiar">Copiar</button></div>
+      <button class="modal-x" data-cerrar aria-label="Cerrar" data-en-aria="Close">×</button>
+      <h2 id="modal-titulo" data-en="View from another device">Ver desde otro dispositivo</h2>
+      <p class="sutil" data-en="Scan it with the phone camera or type the address in another computer’s browser.">Escanea con la cámara del celular o escribe la dirección en el navegador de otra computadora.</p>
+      <img class="qr" id="qr" alt="Código QR con la dirección del panel" data-en-alt="QR code with the panel address">
+      <div class="url-caja"><code id="url-principal"></code><button class="btn btn-sec btn-ch" id="copiar" data-en="Copy">Copiar</button></div>
       <div class="url-otras" id="url-otras"></div>
-      <div class="nota"><b>Tienen que estar en la misma red wifi.</b> Si no carga, la red de la escuela puede estar bloqueando las conexiones entre equipos: prueben con un router propio o compartiendo internet desde un celular.</div>
+      <div class="nota" data-en="&lt;b&gt;Both must be on the same wifi network.&lt;/b&gt; If it doesn’t load, the school network may be blocking connections between devices: try your own router or a phone hotspot."><b>Tienen que estar en la misma red wifi.</b> Si no carga, la red de la escuela puede estar bloqueando las conexiones entre equipos: prueben con un router propio o compartiendo internet desde un celular.</div>
     </div>
+  </div>
+
+  <!-- Configuración: idioma, escala y suelo -->
+  <div class="modal" id="modal-ajustes" hidden>
+    <div class="modal-fondo" data-cerrar></div>
+    <form class="modal-caja ajustes" role="dialog" aria-modal="true" aria-labelledby="aj-titulo" id="form-ajustes" novalidate>
+      <button type="button" class="modal-x" data-cerrar aria-label="Cerrar" data-en-aria="Close">×</button>
+      <h2 id="aj-titulo" data-en="Settings">Configuración</h2>
+
+      <fieldset class="aj-grupo">
+        <legend data-en="Language">Idioma</legend>
+        <p class="aj-ayuda" data-en="Only changes this device.">Solo cambia en este dispositivo.</p>
+        <div class="segmentado" role="radiogroup">
+          <label><input type="radio" name="idioma" value="en"><span>English</span></label>
+          <label><input type="radio" name="idioma" value="es"><span>Español</span></label>
+        </div>
+      </fieldset>
+
+      <p class="aj-bloqueado" id="aj-bloqueado" hidden data-en="Scale and soil can only be changed from the sandbox computer. Here you can only see them.">La escala y el suelo solo se pueden cambiar desde la computadora del sandbox. Aquí solo puedes verlos.</p>
+
+      <fieldset class="aj-grupo" id="aj-escala">
+        <legend data-en="Scale">Escala</legend>
+        <p class="aj-ayuda" data-en="How big the sand terrain is in real life.">Qué tan grande es en la vida real el terreno de arena.</p>
+        <div class="aj-campo">
+          <label for="aj-metros_por_cm" data-en="1 cm of sand equals">1 cm de arena equivale a</label>
+          <div class="aj-entrada"><input type="number" id="aj-metros_por_cm" name="metros_por_cm" step="any" inputmode="decimal"><span>m</span></div>
+        </div>
+        <p class="aj-ejemplo" id="aj-ejemplo-escala"></p>
+        <div class="aj-campo">
+          <label for="aj-escala_vertical"><span data-en="Vertical exaggeration">Exageración vertical</span><small data-en="1 = same as horizontal. 2 = hills twice as tall.">1 = igual que lo horizontal. 2 = cerros el doble de altos.</small></label>
+          <div class="aj-entrada"><input type="number" id="aj-escala_vertical" name="escala_vertical" step="any" inputmode="decimal"><span>×</span></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="aj-grupo" id="aj-suelo">
+        <legend data-en="Soil">Suelo</legend>
+        <p class="aj-ayuda" data-en="Used to calculate landslide risk. Pick a soil type or type your own values.">Se usa para calcular el riesgo de deslave. Elige un tipo de suelo o escribe tus propios valores.</p>
+        <div class="aj-tipos" id="aj-tipos"></div>
+        <div class="aj-campo">
+          <label for="aj-cohesion_kpa"><span data-en="Cohesion">Cohesión</span><small data-en="How much the grains stick together. 0 = loose sand.">Qué tanto se pegan los granos. 0 = arena suelta.</small></label>
+          <div class="aj-entrada"><input type="number" id="aj-cohesion_kpa" name="cohesion_kpa" step="any" inputmode="decimal"><span>kPa</span></div>
+        </div>
+        <div class="aj-campo">
+          <label for="aj-friccion_grados"><span data-en="Friction angle">Ángulo de fricción</span><small data-en="The steepest slope dry soil holds by friction alone.">La ladera más empinada que el suelo seco aguanta solo por fricción.</small></label>
+          <div class="aj-entrada"><input type="number" id="aj-friccion_grados" name="friccion_grados" step="any" inputmode="decimal"><span>°</span></div>
+        </div>
+        <div class="aj-campo">
+          <label for="aj-peso_suelo_kn_m3"><span data-en="Unit weight">Peso del suelo</span><small data-en="How heavy one cubic meter of soil is.">Cuánto pesa un metro cúbico de suelo.</small></label>
+          <div class="aj-entrada"><input type="number" id="aj-peso_suelo_kn_m3" name="peso_suelo_kn_m3" step="any" inputmode="decimal"><span>kN/m³</span></div>
+        </div>
+        <div class="aj-campo">
+          <label for="aj-espesor_suelo_m"><span data-en="Soil thickness">Espesor del suelo</span><small data-en="Depth of the layer that can slide.">Profundidad de la capa que se puede deslizar.</small></label>
+          <div class="aj-entrada"><input type="number" id="aj-espesor_suelo_m" name="espesor_suelo_m" step="any" inputmode="decimal"><span>m</span></div>
+        </div>
+      </fieldset>
+
+      <p class="aj-error" id="aj-error" role="alert" hidden></p>
+      <p class="aj-nota" data-en="Saving scale or soil re-analyzes every capture and updates every connected device.">Al guardar la escala o el suelo se vuelven a analizar todas las capturas y se actualizan todos los dispositivos conectados.</p>
+      <div class="aj-botones">
+        <button type="button" class="btn-link" id="aj-restablecer" data-en="Restore defaults">Volver a los valores normales</button>
+        <span class="aj-espacio"></span>
+        <button type="button" class="btn btn-sec" data-cerrar data-en="Cancel">Cancelar</button>
+        <button type="submit" class="btn btn-pri" id="aj-guardar" data-en="Save">Guardar</button>
+      </div>
+    </form>
   </div>
 
   <div class="avisos" id="avisos" aria-live="polite"></div>

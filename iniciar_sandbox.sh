@@ -166,7 +166,11 @@ if [ "$MODO" = "real" ]; then
 
     # Agua
     if awk -v v="$AGUA_VELOCIDAD" 'BEGIN{exit !(v+0>0)}'; then
-        ok "simulación de agua encendida (-ws $AGUA_VELOCIDAD $AGUA_PASOS_MAXIMOS)"
+        if parametros_agua; then
+            ok "simulación de agua encendida, calidad \"$CALIDAD_AGUA\" (malla ${AGUA_MALLA_ANCHO}x${AGUA_MALLA_ALTO}, hasta $AGUA_PASOS pasos por cuadro)"
+        else
+            problema "CALIDAD_AGUA=\"$CALIDAD_AGUA\" no es válido. Usa alta, media, ligera o manual (con AGUA_MALLA=\"ancho alto\" y AGUA_PASOS_MAXIMOS)."
+        fi
     else
         problema "AGUA_VELOCIDAD debe ser mayor que 0; sin agua no existe la herramienta de guardar relieve."
     fi
@@ -270,6 +274,7 @@ HISTORIAL="$RAIZ/panel/historial"
 [ "$MODO" = "simulacion" ] && HISTORIAL="$RAIZ/panel/historial_simulacion"
 set -- --vigilar "$RUTA_DEM" --puerto "$PUERTO" --historial "$HISTORIAL" --sin-navegador --no-instalar
 [ -n "$ESCALA_METROS_POR_CM" ] && set -- "$@" --escala "$ESCALA_METROS_POR_CM"
+[ "$AJUSTES_DESDE_OTROS_EQUIPOS" = "si" ] && set -- "$@" --ajustes-remotos
 python3 -u "$RAIZ/panel/servidor.py" "$@" </dev/null &
 PID_PANEL=$!
 echo "$PID_PANEL" > "$LOCK/panel.pid"
@@ -375,7 +380,7 @@ else
             info "Sin configuración de Vrui: asigna la tecla a mano (ver LEEME.md)." ;;
     esac
     # shellcheck disable=SC2086
-    set -- "$@" $VRUI_OPCIONES_EXTRA $OPCIONES_SARNDBOX -slf "$BOX" -fpv "$PROY" -ws "$AGUA_VELOCIDAD" "$AGUA_PASOS_MAXIMOS"
+    set -- "$@" $VRUI_OPCIONES_EXTRA $OPCIONES_SARNDBOX -slf "$BOX" -fpv "$PROY" -wts "$AGUA_MALLA_ANCHO" "$AGUA_MALLA_ALTO" -ws "$AGUA_VELOCIDAD" "$AGUA_PASOS"
     info "Iniciando: $SARNDBOX $*"
     info "(desde la carpeta $CARPETA_DEM, para que el .dem quede ahí)"
     # "exec" hace que el número de proceso guardado sea el del propio SARndbox
@@ -410,17 +415,33 @@ if [ "$MODO" = "real" ] && [ "$METODO_PANTALLA_COMPLETA" = "xdotool" ]; then
     PID_PANTALLA=$!
 fi
 
-# Revisar si Vrui ignoró -mergeConfig
-if [ "$MODO" = "real" ] && [ "$METODO_CONFIG_VRUI" = "mergeConfig" ]; then
+# Revisiones mientras corre el SARndbox:
+#  - si Vrui ignoró -mergeConfig (la tecla de guardar no quedó asignada);
+#  - si la simulación de agua no alcanza a ir en tiempo real. El SARndbox
+#    escribe "Ran out of time by ..." cada cuadro en que le faltaron pasos.
+if [ "$MODO" = "real" ]; then
     (
         n=0
         while [ $n -lt 15 ] && proceso_vivo "$PID_SANDBOX"; do sleep 1; n=$((n + 1)); done
-        if grep -q "unrecognized command line switch -mergeConfig" "$LOG" 2>/dev/null; then
+        if [ "$METODO_CONFIG_VRUI" = "mergeConfig" ] && grep -q "unrecognized command line switch -mergeConfig" "$LOG" 2>/dev/null; then
             aviso_ventana "Vrui no reconoció la opción -mergeConfig.
 La tecla \"$TECLA_GUARDAR\" NO quedó asignada automáticamente.
 Por ahora asígnala a mano (LEEME.md, \"Asignar la tecla a mano\") o cambia
 METODO_CONFIG_VRUI a \"usuario\" en sandbox.conf."
         fi
+        antes=0
+        while proceso_vivo "$PID_SANDBOX"; do
+            sleep 60
+            ahora=$(grep -c "Ran out of time" "$LOG" 2>/dev/null)
+            ahora=${ahora:-0}
+            # Más de ~5 cuadros por segundo sin terminar durante un minuto
+            if [ $((ahora - antes)) -gt 300 ]; then
+                echo "AVISO: la simulación de agua no alcanza a ir en tiempo real (el agua se mueve más lento)."
+                echo "       Si se nota, bajen CALIDAD_AGUA en sandbox.conf (ahora: \"$CALIDAD_AGUA\")."
+                break
+            fi
+            antes=$ahora
+        done
     ) &
     PID_REVISOR=$!
 fi

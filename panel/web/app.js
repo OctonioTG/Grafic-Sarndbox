@@ -3,6 +3,23 @@
 
 const $ = (s, el = document) => el.querySelector(s);
 const svgNS = "http://www.w3.org/2000/svg";
+
+// ============================== IDIOMA ======================================
+// Inglés por defecto. Se cambia en Configuración y se guarda solo en este dispositivo.
+const IDIOMA = (() => { try { return localStorage.getItem("idioma") === "es" ? "es" : "en"; } catch { return "en"; } })();
+const EN = IDIOMA === "en", LOC = EN ? "en-US" : "es-MX";
+const t = (es, en) => EN ? en : es;   // t("texto en español", "text in English")
+const pl = (n, uno, varios) => n === 1 ? uno : varios;
+function traducirPagina() {
+  document.documentElement.lang = IDIOMA;
+  if (!EN) { document.title = "Sandbox · Análisis de terreno"; return; }
+  document.querySelectorAll("[data-en]").forEach(e => { e.innerHTML = e.dataset.en; });
+  document.querySelectorAll("[data-en-title]").forEach(e => { e.title = e.dataset.enTitle; });
+  document.querySelectorAll("[data-en-alt]").forEach(e => { e.alt = e.dataset.enAlt; });
+  document.querySelectorAll("[data-en-aria]").forEach(e => e.setAttribute("aria-label", e.dataset.enAria));
+}
+traducirPagina();
+const fuenteTxt = f => f === "Demostración" ? t("Demostración", "Demo") : f;
 // ============================== ESTADO ======================================
 const S = {
   capturas: [], urls: [], local: "", fuente: "",
@@ -10,6 +27,7 @@ const S = {
   meta: new Map(), capas: new Map(), comp: new Map(), compCapa: new Map(), imagenes: new Map(),
   capa: "relieve", curvas: true, seguir: true,
   nivel: null,      // nivel del agua elegido por el usuario (null = el del análisis)
+  lluvia: null,     // qué tan mojado está el suelo, 0 a 1 (null = el del análisis)
   linea: null,      // puntos A y B del perfil, en celdas
   perfilFijo: null, // punto marcado en el perfil (0 = A, 1 = B)
   vista: { escala: 1, ox: 0, oy: 0, ajustada: false },
@@ -18,25 +36,25 @@ const S = {
 
 // ============================== FORMATO =====================================
 const nf = (v, d = 0) => (v == null || !isFinite(v)) ? "—" :
-  Number(v).toLocaleString("es-MX", { minimumFractionDigits: d, maximumFractionDigits: d });
+  Number(v).toLocaleString(LOC, { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtArea = m2 => m2 < 1e4 ? `${nf(m2)} m²` : m2 < 1e6 ? `${nf(m2 / 1e4, 1)} ha` : `${nf(m2 / 1e6, 2)} km²`;
-const fmtVol = m3 => m3 >= 1e6 ? `${nf(m3 / 1e6, 2)} millones de m³` : `${nf(m3)} m³`;
+const fmtVol = m3 => m3 >= 1e6 ? `${nf(m3 / 1e6, 2)} ${t("millones de m³", "million m³")}` : `${nf(m3)} m³`;
 const fmtLen = m => m < 1000 ? `${nf(m)} m` : `${nf(m / 1000, m < 1e4 ? 2 : 1)} km`;
-const horaDe = iso => new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const horaDe = iso => new Date(iso).toLocaleTimeString(LOC, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 function relativo(iso) {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 45) return "hace un momento";
-  if (s < 3600) return `hace ${Math.round(s / 60)} min`;
-  if (s < 86400) return `hace ${Math.round(s / 3600)} h`;
-  return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+  if (s < 45) return t("hace un momento", "just now");
+  if (s < 3600) return t(`hace ${Math.round(s / 60)} min`, `${Math.round(s / 60)} min ago`);
+  if (s < 86400) return t(`hace ${Math.round(s / 3600)} h`, `${Math.round(s / 3600)} h ago`);
+  return new Date(iso).toLocaleDateString(LOC, { day: "numeric", month: "short" });
 }
 function fechaLarga(iso) {
   const d = new Date(iso), hoy = new Date();
-  const dia = d.toDateString() === hoy.toDateString() ? "Hoy" :
-    d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+  const dia = d.toDateString() === hoy.toDateString() ? t("Hoy", "Today") :
+    d.toLocaleDateString(LOC, { weekday: "long", day: "numeric", month: "long" });
   return `${dia[0].toUpperCase() + dia.slice(1)}, ${horaDe(iso)}`;
 }
-const cardinal = o => (o == null || isNaN(o)) ? null : ["N", "NE", "E", "SE", "S", "SO", "O", "NO"][Math.round(o / 45) % 8];
+const cardinal = o => (o == null || isNaN(o)) ? null : (EN ? ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] : ["N", "NE", "E", "SE", "S", "SO", "O", "NO"])[Math.round(o / 45) % 8];
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 // ============================== COLORES =====================================
@@ -64,10 +82,10 @@ const lutCss = (lut, n = 7) => `linear-gradient(90deg, ${Array.from({ length: n 
 }).join(",")})`;
 
 const FS = [
-  { max: 1, color: [192, 57, 43], nombre: "Inestable", rango: "FS menor a 1", a: .88 },
-  { max: 1.3, color: [232, 131, 58], nombre: "Crítico", rango: "FS 1 a 1.3", a: .8 },
-  { max: 1.5, color: [242, 201, 76], nombre: "Moderado", rango: "FS 1.3 a 1.5", a: .65 },
-  { max: Infinity, color: [143, 196, 160], nombre: "Estable", rango: "FS mayor a 1.5", a: .18 },
+  { max: 1, color: [192, 57, 43], nombre: t("Inestable", "Unstable"), rango: t("FS menor a 1", "FS below 1"), a: .88 },
+  { max: 1.3, color: [232, 131, 58], nombre: t("Crítico", "Critical"), rango: t("FS 1 a 1.3", "FS 1 to 1.3"), a: .8 },
+  { max: 1.5, color: [242, 201, 76], nombre: t("Moderado", "Moderate"), rango: t("FS 1.3 a 1.5", "FS 1.3 to 1.5"), a: .65 },
+  { max: Infinity, color: [143, 196, 160], nombre: t("Estable", "Stable"), rango: t("FS mayor a 1.5", "FS above 1.5"), a: .18 },
 ];
 const claseFS = v => FS.find(c => v < c.max) || FS[3];
 const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
@@ -75,13 +93,13 @@ const CUENCAS = ["#4e79a7", "#f28e2b", "#59a14f", "#e15759", "#b07aa1", "#edc948
 const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 
 const CAPAS = [
-  { id: "relieve", nombre: "Relieve", icono: "#8fb573", datos: ["elevacion"] },
-  { id: "pendiente", nombre: "Pendiente", icono: "#f08c3c", datos: ["pendiente"] },
-  { id: "riesgo_seco", nombre: "Deslave · seco", icono: "#e8833a", datos: ["fs_seco"] },
-  { id: "riesgo_lluvia", nombre: "Deslave · lluvia", icono: "#c0392b", datos: ["fs_lluvia"] },
-  { id: "drenaje", nombre: "Drenaje", icono: "#4e79a7", datos: ["cuencas", "rios"] },
-  { id: "inundacion", nombre: "Inundación", icono: "#2f7fd1", datos: ["hand", "encharcamiento"] },
-  { id: "cambios", nombre: "Cambios", icono: "#8e5ab5", datos: [], comp: true },
+  { id: "relieve", nombre: t("Relieve", "Relief"), icono: "#8fb573", datos: ["elevacion"] },
+  { id: "pendiente", nombre: t("Pendiente", "Slope"), icono: "#f08c3c", datos: ["pendiente"] },
+  { id: "riesgo_seco", nombre: t("Deslave · seco", "Landslide · dry"), icono: "#e8833a", datos: ["fs_seco"] },
+  { id: "riesgo_lluvia", nombre: t("Deslave · lluvia", "Landslide · rain"), icono: "#c0392b", datos: ["fs_lluvia", "pendiente"] },
+  { id: "drenaje", nombre: t("Drenaje", "Drainage"), icono: "#4e79a7", datos: ["cuencas", "rios"] },
+  { id: "inundacion", nombre: t("Inundación", "Flooding"), icono: "#2f7fd1", datos: ["hand", "encharcamiento"] },
+  { id: "cambios", nombre: t("Cambios", "Changes"), icono: "#8e5ab5", datos: [], comp: true },
 ];
 const TODAS_LAS_CAPAS = ["elevacion", "sombreado", "pendiente", "orientacion", "fs_seco", "fs_lluvia", "hand", "encharcamiento", "cuencas", "rios"];
 
@@ -118,6 +136,46 @@ function interpCurva(m, nivel) {
   const t = Math.max(0, Math.min(1, (nivel - h[i - 1]) / ((h[i] - h[i - 1]) || 1)));
   return a[i - 1] + (a[i] - a[i - 1]) * t;
 }
+// ---- Riesgo de deslave con cualquier cantidad de lluvia (mismo talud infinito que el analizador) ----
+// FS = c / (γ z senβ cosβ) + (1 − m γw/γ) tanφ / tanβ ;  m = qué tan mojado está el suelo (0 a 1)
+const lluviaActual = m => S.lluvia != null ? S.lluvia : m.parametros.saturacion;
+let cacheFS = { clave: "", arr: null };
+function fsLluvia(m) {
+  const sat = lluviaActual(m), base = capaLista(m.id, "fs_lluvia");
+  if (Math.abs(sat - m.parametros.saturacion) < 1e-6) return base;
+  const pend = capaLista(m.id, "pendiente"); if (!pend) return base;
+  const clave = `${m.id}:${sat.toFixed(3)}`;
+  if (cacheFS.clave === clave) return cacheFS.arr;
+  const P = m.parametros, g = P.peso_suelo_kn_m3, zs = P.espesor_suelo_m, tphi = Math.tan(P.friccion_grados * Math.PI / 180);
+  const fr = (1 - sat * 9.81 / g) * tphi, arr = new Float32Array(pend.length);
+  for (let i = 0; i < pend.length; i++) {
+    const d = pend[i];
+    if (isNaN(d)) { arr[i] = NaN; continue; }
+    const b = Math.min(89, Math.max(.5, d)) * Math.PI / 180;
+    arr[i] = Math.min(5, Math.max(0, P.cohesion_kpa / (g * zs * Math.sin(b) * Math.cos(b)) + fr / Math.tan(b)));
+  }
+  cacheFS = { clave, arr };
+  return arr;
+}
+// Porcentaje del terreno en cada clase (inestable, crítico, moderado, estable) con la lluvia elegida
+function cuadroLluvia(m) {
+  const arr = fsLluvia(m);
+  if (!arr || arr === capaLista(m.id, "fs_lluvia") && S.lluvia == null) return m.cuadro.map(c => c.lluvia);
+  const n = [0, 0, 0, 0];
+  for (let i = 0; i < arr.length; i++) { const f = arr[i]; if (isNaN(f)) continue; n[f < 1 ? 0 : f < 1.3 ? 1 : f < 1.5 ? 2 : 3]++; }
+  return n.map(v => 100 * v / arr.length);
+}
+// El escenario que se ve en el mapa (lluvia y nivel del agua elegidos)
+function escenario(m) {
+  const nivel = nivelActual(m);
+  return { lluvia: lluviaActual(m), inestable: cuadroLluvia(m)[0], nivel, inund: pctInundado(m, nivel),
+           propio: S.lluvia != null || S.nivel != null };
+}
+// Colores de riesgo con trama, para que se distingan también sin ver bien los colores
+const estiloFS = i => `background-color:${rgb(FS[i].color)};` + (i === 0
+  ? "background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.4) 0 2px,transparent 2px 6px);"
+  : i === 1 ? "background-image:radial-gradient(rgba(0,0,0,.38) 1.2px,transparent 1.6px);background-size:5px 5px;" : "");
+
 const cachePct = new Map();
 function pctInundado(m, nivel) {
   const k = `${m.id}:${nivel.toFixed(3)}`;
@@ -144,16 +202,16 @@ function ponerEstado(tipo, texto) {
   $("#estado-texto").textContent = texto;
 }
 function estadoNormal() {
-  if (!S.conectado) return ponerEstado("caido", "Sin conexión · reintentando");
-  if (S.fuente === "demo") return ponerEstado("vivo", "Demostración");
-  if (!S.capturas.length) return ponerEstado("vivo", "Esperando captura");
-  ponerEstado("vivo", "En vivo");
+  if (!S.conectado) return ponerEstado("caido", t("Sin conexión · reintentando", "Offline · retrying"));
+  if (S.fuente === "demo") return ponerEstado("vivo", t("Demostración", "Demo"));
+  if (!S.capturas.length) return ponerEstado("vivo", t("Esperando captura", "Waiting for capture"));
+  ponerEstado("vivo", t("En vivo", "Live"));
 }
 
 // ============================== HISTORIAL ===================================
 async function refrescarLista() {
   const d = await getJSON("/api/estado");
-  S.capturas = d.capturas; S.urls = d.urls; S.local = d.local; S.fuente = d.fuente;
+  S.capturas = d.capturas; S.urls = d.urls; S.local = d.local; S.fuente = d.fuente; S.version = d.version || 0;
   pintarHistorial();
   $("#vacio").hidden = S.capturas.length > 0;
   $("#panel").hidden = S.capturas.length === 0;
@@ -172,12 +230,12 @@ function pintarHistorial(nuevoId) {
     li.dataset.id = c.id;
     const r = c.resumen;
     const chips = [];
-    if (c.id === S.capturas[0].id) chips.push(`<span class="chip nuevo">Última</span>`);
-    if (r && r.deslaves) chips.push(`<span class="chip rojo">${r.deslaves} deslave${r.deslaves > 1 ? "s" : ""}</span>`);
-    if (r) chips.push(`<span class="chip" title="Terreno inestable con lluvia">Riesgo ${nf(r.inestable_lluvia)}%</span>`);
-    if (c.id === S.compararCon && c.id !== S.actual) chips.push(`<span class="chip base">Base de comparación</span>`);
+    if (c.id === S.capturas[0].id) chips.push(`<span class="chip nuevo">${t("Última", "Latest")}</span>`);
+    if (r && r.deslaves) chips.push(`<span class="chip rojo">${r.deslaves} ${t(pl(r.deslaves, "deslave", "deslaves"), pl(r.deslaves, "landslide", "landslides"))}</span>`);
+    if (r) chips.push(`<span class="chip" title="${t("Terreno inestable con lluvia", "Terrain unstable with rain")}">${t("Riesgo", "Risk")} ${nf(r.inestable_lluvia)}%</span>`);
+    if (c.id === S.compararCon && c.id !== S.actual) chips.push(`<span class="chip base">${t("Base de comparación", "Comparison base")}</span>`);
     li.innerHTML = `
-      <img src="/api/captura/${c.id}/miniatura.png?h=${encodeURIComponent(c.hora)}" alt="" loading="lazy">
+      <img src="/api/captura/${c.id}/miniatura.png?v=2&a=${S.version || 0}&h=${encodeURIComponent(c.hora)}" alt="" loading="lazy">
       <div>
         <div class="cap-titulo"><span>#${c.id}</span><span class="cap-hora">${horaDe(c.hora)}</span></div>
         <div class="cap-rel" data-rel="${c.hora}">${relativo(c.hora)}</div>
@@ -208,12 +266,12 @@ async function seleccionar(id) {
 
   let m = S.meta.get(id);
   if (!m) {
-    try { m = await getJSON(`/api/captura/${id}`); } catch { aviso("No se pudo cargar la captura."); return; }
+    try { m = await getJSON(`/api/captura/${id}`); } catch { aviso(t("No se pudo cargar la captura.", "Couldn’t load the capture.")); return; }
     if (tok !== S.token) return;
     m.rutas = rutasCurvas(m.curvas);
     S.meta.set(id, m);
   }
-  if (cambioDeCaptura) { S.compararCon = m.anterior; S.nivel = null; S.perfilFijo = null; }
+  if (cambioDeCaptura) { S.compararCon = m.anterior; S.nivel = null; S.lluvia = null; S.perfilFijo = null; }
   if (!S.linea || S.linea.dims !== `${m.filas}x${m.cols}`) S.linea = lineaOriginal(m);
 
   pintarCabecera(m);
@@ -232,7 +290,7 @@ async function seleccionar(id) {
 
   try {
     await Promise.all(["sombreado", "elevacion", ...capaActual().datos].map(n => capaDatos(id, n)));
-  } catch { aviso("No se pudo cargar el mapa."); return; }
+  } catch { aviso(t("No se pudo cargar el mapa.", "Couldn’t load the map.")); return; }
   if (tok !== S.token) return;
   const dims = `${m.filas}x${m.cols}`;
   if (!S.vista.ajustada || S.vista.dims !== dims) { ajustarVista(); S.vista.dims = dims; }
@@ -240,14 +298,14 @@ async function seleccionar(id) {
   $("#cargando-mapa").classList.add("oculto");
 
   cargarComparacion();
-  Promise.all(TODAS_LAS_CAPAS.map(n => capaDatos(id, n))).then(() => { if (tok === S.token) { actualizarInspector(); graficaInundacion(m); programarGraficas(); actualizarControlNivel(m); } }).catch(() => {});
+  Promise.all(TODAS_LAS_CAPAS.map(n => capaDatos(id, n))).then(() => { if (tok === S.token) { actualizarInspector(); graficaInundacion(m); programarGraficas(); actualizarControlNivel(m); pintarKpis(m); } }).catch(() => {});
   limpiarCache();
 }
 
 // ============================== CABECERA Y KPIs =============================
 function pintarCabecera(m) {
-  $("#cab-meta").textContent = `${fechaLarga(m.hora)} · ${relativo(m.hora)} · ${m.fuente}`;
-  $("#cab-titulo").textContent = `Captura #${m.id}`;
+  $("#cab-meta").textContent = `${fechaLarga(m.hora)} · ${relativo(m.hora)} · ${fuenteTxt(m.fuente)}`;
+  $("#cab-titulo").textContent = `${t("Captura", "Capture")} #${m.id}`;
   pintarAlertas();
 }
 function pintarAlertas() {
@@ -256,10 +314,11 @@ function pintarAlertas() {
   const a = [];
   const ico = `<svg viewBox="0 0 24 24"><path d="M12 3l10 18H2zM12 10v5M12 18v.5"/></svg>`;
   if (c && c.eventos && c.eventos.length)
-    a.push(`<div class="alerta">${ico}${c.eventos.length} deslave${c.eventos.length > 1 ? "s" : ""} detectado${c.eventos.length > 1 ? "s" : ""} <button data-ir="cambios">Ver en el mapa</button></div>`);
-  if (m.kpis.inestable_sat_pct >= 1)
-    a.push(`<div class="alerta">${ico}${nf(m.kpis.inestable_sat_pct, 1)}% sería inestable con lluvia <button data-ir="riesgo_lluvia">Ver en el mapa</button></div>`);
-  if (!a.length) a.push(`<div class="alerta ok"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>Sin alertas</div>`);
+    a.push(`<div class="alerta">${ico}${c.eventos.length} ${t(pl(c.eventos.length, "deslave detectado", "deslaves detectados"), pl(c.eventos.length, "landslide detected", "landslides detected"))} <button data-ir="cambios">${t("Ver en el mapa", "Show on map")}</button></div>`);
+  const esc = escenario(m);
+  if (esc.inestable >= 1)
+    a.push(`<div class="alerta">${ico}${nf(esc.inestable, 1)}% ${t("sería inestable con lluvia", "would be unstable with rain")} <button data-ir="riesgo_lluvia">${t("Ver en el mapa", "Show on map")}</button></div>`);
+  if (!a.length) a.push(`<div class="alerta ok"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>${t("Sin alertas", "No alerts")}</div>`);
   $("#alertas").innerHTML = a.join("");
   $("#alertas").querySelectorAll("[data-ir]").forEach(b => b.onclick = () => {
     if (b.dataset.ir === "cambios") { const ev = c.eventos[0]; verEvento(ev); } else { elegirCapa(b.dataset.ir); irAlMapa(); }
@@ -276,33 +335,47 @@ function pintarKpis(m) {
   };
   const c = S.compararCon ? S.comp.get(`${S.compararCon}-${S.actual}`) : null;
   const nDes = c && c.eventos ? c.eventos.length : null;
+  const esc = escenario(m);
   const tarjetas = [
-    ["Área del terreno", fmtArea(k.area), `celda de ${nf(k.celda, 2)} m`, null],
-    ["Elevación máxima", `${nf(k.zmax)}<small>m</small>`, `mínima ${nf(k.zmin)} m · desnivel ${nf(k.zmax - k.zmin)} m`, null],
-    ["Pendiente media", `${nf(k.pend_media, 1)}<small>°</small>`, `${nf(k.pend30_pct, 1)}% arriba de 30°`, null],
-    ["Inestable con lluvia", `${nf(k.inestable_sat_pct, 1)}<small>%</small>${delta(k.inestable_sat_pct, prev && prev.inestable_lluvia)}`,
-      `en seco: ${nf(k.inestable_seco_pct, 1)}%`, "var(--riesgo)"],
-    ["Área inundable", `${nf(k.inund_pct, 1)}<small>%</small>${delta(k.inund_pct, prev && prev.inundable)}`,
-      `ríos crecidos +${nf(k.nivel, 1)} m`, "var(--agua)"],
-    ["Deslaves detectados", nDes == null ? "—" : nf(nDes),
-      S.compararCon ? `desde la captura #${S.compararCon}` : "se necesita otra captura", nDes ? "var(--riesgo)" : null],
+    [t("Área del terreno", "Terrain area"), fmtArea(k.area), t(`celda de ${nf(k.celda, 2)} m`, `${nf(k.celda, 2)} m cells`), null],
+    [t("Elevación máxima", "Highest point"), `${nf(k.zmax)}<small>m</small>`, t(`mínima ${nf(k.zmin)} m · desnivel ${nf(k.zmax - k.zmin)} m`, `lowest ${nf(k.zmin)} m · relief ${nf(k.zmax - k.zmin)} m`), null],
+    [t("Pendiente media", "Average slope"), `${nf(k.pend_media, 1)}<small>°</small>`, t(`${nf(k.pend30_pct, 1)}% arriba de 30°`, `${nf(k.pend30_pct, 1)}% steeper than 30°`), null],
+    [t("Inestable con lluvia", "Unstable with rain"), `${nf(esc.inestable, 1)}<small>%</small>${S.lluvia == null ? delta(k.inestable_sat_pct, prev && prev.inestable_lluvia) : ""}`,
+      S.lluvia == null ? t(`en seco: ${nf(k.inestable_seco_pct, 1)}%`, `when dry: ${nf(k.inestable_seco_pct, 1)}%`) : t(`suelo ${nf(esc.lluvia * 100)}% mojado (elegido)`, `soil ${nf(esc.lluvia * 100)}% wet (chosen)`), "var(--riesgo)"],
+    [t("Área inundable", "Floodable area"), `${nf(esc.inund, 1)}<small>%</small>${S.nivel == null ? delta(k.inund_pct, prev && prev.inundable) : ""}`,
+      t(`ríos crecidos +${nf(esc.nivel, 1)} m`, `rivers up +${nf(esc.nivel, 1)} m`) + (S.nivel == null ? "" : t(" (elegido)", " (chosen)")), "var(--agua)"],
+    [t("Deslaves detectados", "Landslides detected"), nDes == null ? "—" : nf(nDes),
+      S.compararCon ? t(`desde la captura #${S.compararCon}`, `since capture #${S.compararCon}`) : t("se necesita otra captura", "needs another capture"), nDes ? "var(--riesgo)" : null],
   ];
-  pintarFrase(k, nDes);
+  pintarFrase(m, nDes);
   $("#kpis").innerHTML = tarjetas.map(([et, val, sub, col]) => `
     <div class="kpi"><div class="kpi-et">${col ? `<i style="background:${col}"></i>` : ""}${et}</div>
     <div class="kpi-val">${val}</div><div class="kpi-sub">${sub}</div></div>`).join("");
 }
 
-// Resumen en una frase, en español sencillo, arriba de los números.
-function pintarFrase(k, nDes) {
-  const p = [];
-  if (k.inestable_sat_pct >= 0.1)
-    p.push(`Con lluvia, el <em class="r">${nf(k.inestable_sat_pct, 1)}%</em> del terreno se volvería inestable`
-      + (k.inestable_seco_pct < k.inestable_sat_pct ? `; en seco, solo el ${nf(k.inestable_seco_pct, 1)}%.` : "."));
-  else p.push("Las laderas se ven estables, incluso con lluvia.");
+// Resumen en una frase sencilla, arriba de los números.
+function pintarFrase(m, nDes) {
+  const k = m.kpis, esc = escenario(m), p = [];
+  if (EN) {
+    const cuando = S.lluvia == null ? "With rain" : `With the soil ${nf(esc.lluvia * 100)}% wet`;
+    if (esc.inestable >= 0.1)
+      p.push(`${cuando}, <em class="r">${nf(esc.inestable, 1)}%</em> of the terrain would become unstable`
+        + (k.inestable_seco_pct < esc.inestable ? `; when dry, only ${nf(k.inestable_seco_pct, 1)}%.` : "."));
+    else p.push(S.lluvia == null ? "The slopes look stable, even with rain." : `${cuando}, the slopes look stable.`);
+    if (nDes > 0) p.push(`<em class="r">${nDes} ${pl(nDes, "landslide was", "landslides were")}</em> detected since capture #${S.compararCon}.`);
+    else if (nDes === 0) p.push(`No landslides since capture #${S.compararCon}.`);
+    p.push(`If the rivers rise ${nf(esc.nivel, 1)} m, <em class="a">${nf(esc.inund, 1)}%</em> would flood.`);
+    $("#frase").innerHTML = p.join(" ");
+    return;
+  }
+  const cuando = S.lluvia == null ? "Con lluvia" : `Con el suelo ${nf(esc.lluvia * 100)}% mojado`;
+  if (esc.inestable >= 0.1)
+    p.push(`${cuando}, el <em class="r">${nf(esc.inestable, 1)}%</em> del terreno se volvería inestable`
+      + (k.inestable_seco_pct < esc.inestable ? `; en seco, solo el ${nf(k.inestable_seco_pct, 1)}%.` : "."));
+  else p.push(S.lluvia == null ? "Las laderas se ven estables, incluso con lluvia." : `${cuando}, las laderas se ven estables.`);
   if (nDes > 0) p.push(`Se detect${nDes > 1 ? "aron" : "ó"} <em class="r">${nDes} deslave${nDes > 1 ? "s" : ""}</em> desde la captura #${S.compararCon}.`);
   else if (nDes === 0) p.push(`Sin deslaves desde la captura #${S.compararCon}.`);
-  p.push(`Si los ríos crecen ${nf(k.nivel, 1)} m, se inundaría el <em class="a">${nf(k.inund_pct, 1)}%</em>.`);
+  p.push(`Si los ríos crecen ${nf(esc.nivel, 1)} m, se inundaría el <em class="a">${nf(esc.inund, 1)}%</em>.`);
   $("#frase").innerHTML = p.join(" ");
 }
 
@@ -313,7 +386,7 @@ function pintarTabs() {
   $("#capas").innerHTML = CAPAS.map(cp => {
     const des = cp.comp && !S.compararCon;
     const badge = cp.comp && c && c.eventos && c.eventos.length ? `<span class="tab-badge">${c.eventos.length}</span>` : "";
-    return `<button class="tab" role="tab" data-capa="${cp.id}" aria-selected="${cp.id === S.capa}" ${des ? "disabled title='Se necesita otra captura para comparar'" : ""}>
+    return `<button class="tab" role="tab" data-capa="${cp.id}" aria-selected="${cp.id === S.capa}" ${des ? `disabled title="${t("Se necesita otra captura para comparar", "Needs another capture to compare")}"` : ""}>
       <i style="background:${cp.icono}"></i>${cp.nombre}${badge}</button>`;
   }).join("");
   $("#capas").querySelectorAll(".tab").forEach(b => b.onclick = () => elegirCapa(b.dataset.capa));
@@ -329,7 +402,7 @@ async function elegirCapa(id) {
     try {
       await Promise.all(cp.datos.map(n => capaDatos(S.actual, n)));
       if (cp.comp) await cargarComparacion();
-    } catch { aviso("No se pudo cargar la capa."); }
+    } catch { aviso(t("No se pudo cargar la capa.", "Couldn’t load the layer.")); }
     $("#cargando-mapa").classList.add("oculto");
   }
   pedirDibujo();
@@ -338,35 +411,42 @@ function pintarLeyenda() {
   const m = S.meta.get(S.actual); if (!m) return;
   const k = m.kpis, sat = Math.round(m.parametros.saturacion * 100);
   const cuadro = Object.fromEntries(m.cuadro.map((c, i) => [i, c]));
+  const cl = cuadroLluvia(m);
   const clases = (col) => `<div class="leyenda-clases">${FS.map((c, i) =>
-    `<div><i style="background:${rgb(c.color)}"></i><span><b>${c.nombre}</b> · ${c.rango}</span><span class="lc-pct">${nf(cuadro[i][col], 1)}%</span></div>`).join("")}</div>`;
+    `<div><i style="${estiloFS(i)}"></i><span><b>${c.nombre}</b> · ${c.rango}</span><span class="lc-pct" data-clase="${col}-${i}">${nf(col === "lluvia" ? cl[i] : cuadro[i][col], 1)}%</span></div>`).join("")}</div>`;
   const grad = (lut, a, b) => `<div class="leyenda-grad" style="background:${lutCss(lut)}"></div><div class="leyenda-ext"><span>${a}</span><span>${b}</span></div>`;
   const comp = S.compararCon ? S.comp.get(`${S.compararCon}-${S.actual}`) : null;
   const info = {
-    relieve: ["Relieve", `Altura del terreno. Las líneas son curvas de nivel cada ${nf(m.curvas.intervalo)} m; las gruesas, cada ${nf(m.curvas.intervalo * 5)} m.`,
+    relieve: [t("Relieve", "Relief"), t(`Altura del terreno. Las líneas son curvas de nivel cada ${nf(m.curvas.intervalo)} m; las gruesas, cada ${nf(m.curvas.intervalo * 5)} m.`,
+      `Height of the terrain. The lines are contour lines every ${nf(m.curvas.intervalo)} m; the thick ones every ${nf(m.curvas.intervalo * 5)} m.`),
       grad(RAMPA.relieve, `${nf(k.zmin)} m`, `${nf(k.zmax)} m`) + `
       <div class="perfil-mini">
-        <div class="perfil-mini-cab"><b>Perfil de A a B</b><button class="btn-link" id="linea-reset" ${S.linea && S.linea.propia ? "" : "hidden"}>Volver a la línea original</button></div>
+        <div class="perfil-mini-cab"><b>${t("Perfil de A a B", "Profile from A to B")}</b><button class="btn-link" id="linea-reset" ${S.linea && S.linea.propia ? "" : "hidden"}>${t("Volver a la línea original", "Back to the original line")}</button></div>
         <div class="grafica" id="g-perfil-mini"></div>
-        <p class="ayuda">Arrastra los puntos <b>A</b> y <b>B</b> en el mapa para cambiar el corte. Toca la gráfica para marcar un punto.</p>
+        <p class="ayuda">${t("Arrastra los puntos <b>A</b> y <b>B</b> en el mapa para cambiar el corte. Toca la gráfica para marcar un punto.", "Drag points <b>A</b> and <b>B</b> on the map to change the cut. Tap the chart to mark a point.")}</p>
       </div>`],
-    pendiente: ["Pendiente", "Qué tan inclinada es cada ladera. Arriba de unos 30–35° la arena seca ya no se sostiene.",
-      grad(RAMPA.pendiente, "0°", "45° o más")],
-    riesgo_seco: ["Riesgo de deslave en seco", "Factor de seguridad (FS): compara lo que sostiene al suelo contra lo que lo jala ladera abajo. Con FS menor a 1, la ladera falla.",
+    pendiente: [t("Pendiente", "Slope"), t("Qué tan inclinada es cada ladera. Arriba de unos 30–35° la arena seca ya no se sostiene.", "How steep each slope is. Above about 30–35° dry sand no longer holds."),
+      grad(RAMPA.pendiente, "0°", t("45° o más", "45° or more"))],
+    riesgo_seco: [t("Riesgo de deslave en seco", "Landslide risk when dry"), t("Factor de seguridad (FS): compara lo que sostiene al suelo contra lo que lo jala ladera abajo. Con FS menor a 1, la ladera falla.", "Factor of safety (FS): compares what holds the soil in place against what pulls it downhill. With FS below 1, the slope fails."),
       clases("seco")],
-    riesgo_lluvia: [`Riesgo de deslave con lluvia`, `El mismo cálculo con el suelo saturado de agua (${sat}%). El agua le quita resistencia al suelo, por eso aparecen más zonas en riesgo.`,
-      clases("lluvia")],
-    drenaje: ["Drenaje y cuencas", "Hacia dónde escurre el agua de lluvia. Cada color es una cuenca (el área que drena a un mismo río); las líneas azules son los ríos.",
-      `<div class="leyenda-clases">${m.cuencas.slice(0, 4).map((c, i) => `<div><i style="background:${CUENCAS[i]}"></i>Cuenca ${c.n}<span class="lc-pct">${fmtArea(c.area)}</span></div>`).join("")}
-       <div><i style="background:#0b4f9c"></i>Ríos<span class="lc-pct">${fmtLen(k.long_rios)}</span></div></div>`],
-    inundacion: ["Zonas inundables", "Zonas que quedan bajo el agua si los ríos suben, más el agua que se estanca en hundimientos (método HAND).",
-      controlNivel(m) + grad(RAMPA.agua, "poca agua", "más profundo")],
-    cambios: ["Cambios entre capturas", comp && !comp.error ? `Diferencia contra la captura #${S.compararCon}. Rojo: se perdió arena. Azul: se acumuló. Las flechas marcan los deslaves detectados.` : "Se necesita otra captura para comparar.",
+    riesgo_lluvia: [t("Riesgo de deslave con lluvia", "Landslide risk with rain"), t("El mismo cálculo con el suelo mojado. El agua le quita resistencia al suelo, por eso con más lluvia aparecen más zonas en riesgo.", "The same calculation with wet soil. Water weakens the soil, so more rain means more areas at risk."),
+      controlLluvia(m) + clases("lluvia")],
+    drenaje: [t("Drenaje y cuencas", "Drainage and watersheds"), t("Hacia dónde escurre el agua de lluvia. Cada color es una cuenca (el área que drena a un mismo río); las líneas azules son los ríos.", "Where rainwater flows. Each color is a watershed (the area that drains to the same river); the blue lines are rivers."),
+      `<div class="leyenda-clases">${m.cuencas.slice(0, 4).map((c, i) => `<div><i style="background:${CUENCAS[i]}"></i>${t("Cuenca", "Watershed")} ${c.n}<span class="lc-pct">${fmtArea(c.area)}</span></div>`).join("")}
+       <div><i style="background:#0b4f9c"></i>${t("Ríos", "Rivers")}<span class="lc-pct">${fmtLen(k.long_rios)}</span></div></div>`],
+    inundacion: [t("Zonas inundables", "Flood zones"), t("Zonas que quedan bajo el agua si los ríos suben, más el agua que se estanca en hundimientos (método HAND).", "Areas under water if the rivers rise, plus water that pools in hollows (HAND method)."),
+      controlNivel(m) + grad(RAMPA.agua, t("poca agua", "shallow"), t("más profundo", "deeper"))],
+    cambios: [t("Cambios entre capturas", "Changes between captures"), comp && !comp.error ? t(`Diferencia contra la captura #${S.compararCon}. Rojo: se perdió arena. Azul: se acumuló. Las flechas marcan los deslaves detectados.`, `Difference against capture #${S.compararCon}. Red: sand was lost. Blue: sand piled up. Arrows mark detected landslides.`) : t("Se necesita otra captura para comparar.", "Needs another capture to compare."),
       comp && !comp.error ? grad(RAMPA.cambios, `−${nf(comp.max_abs, 1)} m`, `+${nf(comp.max_abs, 1)} m`) : ""],
   }[S.capa];
   $("#capa-titulo").textContent = info[0];
   $("#capa-desc").textContent = info[1];
   $("#leyenda").innerHTML = info[2];
+  const sll = $("#lluvia");
+  if (sll) {
+    sll.oninput = e => ponerLluvia(+e.target.value / 100);
+    $("#lluvia-reset").onclick = () => ponerLluvia(null);
+  }
   const sl = $("#nivel");
   if (sl) {
     sl.oninput = e => ponerNivel(+e.target.value);
@@ -383,11 +463,38 @@ function pintarLeyenda() {
 function controlNivel(m) {
   const hmax = m.curva.nivel[m.curva.nivel.length - 1] || 1, nv = nivelActual(m);
   return `<div class="control-nivel">
-    <label for="nivel">Nivel del agua sobre los ríos</label>
+    <label for="nivel">${t("Nivel del agua sobre los ríos", "Water level above the rivers")}</label>
     <div class="control-nivel-fila"><input type="range" id="nivel" min="0" max="${hmax.toFixed(1)}" step="0.1" value="${nv.toFixed(1)}"><b id="nivel-val">${nf(nv, 1)} m</b></div>
-    <div class="control-nivel-res"><b id="nivel-pct">${nf(pctInundado(m, nv), 1)}%</b> del terreno queda bajo el agua</div>
-    <button class="btn-link" id="nivel-reset" ${S.nivel == null ? "hidden" : ""}>Volver al escenario original (${nf(m.kpis.nivel, 1)} m)</button>
+    <div class="control-nivel-res"><b id="nivel-pct">${nf(pctInundado(m, nv), 1)}%</b> ${t("del terreno queda bajo el agua", "of the terrain is under water")}</div>
+    <button class="btn-link" id="nivel-reset" ${S.nivel == null ? "hidden" : ""}>${t("Volver al escenario original", "Back to the original scenario")} (${nf(m.kpis.nivel, 1)} m)</button>
   </div>`;
+}
+// Control de lluvia, junto al mapa de riesgo con lluvia
+function controlLluvia(m) {
+  const v = lluviaActual(m) * 100;
+  return `<div class="control-nivel control-lluvia">
+    <label for="lluvia">${t("¿Qué tan mojado está el suelo?", "How wet is the soil?")}</label>
+    <div class="control-nivel-fila"><span class="sutil">${t("seco", "dry")}</span><input type="range" id="lluvia" min="0" max="100" step="5" value="${Math.round(v)}"><span class="sutil">${t("empapado", "soaked")}</span></div>
+    <div class="control-nivel-res"><b id="lluvia-val">${nf(v)}%</b> ${t("mojado", "wet")} · <b id="lluvia-pct" class="r">${nf(cuadroLluvia(m)[0], 1)}%</b> ${t("del terreno inestable", "of the terrain unstable")}</div>
+    <button class="btn-link" id="lluvia-reset" ${S.lluvia == null ? "hidden" : ""}>${t("Volver al escenario original", "Back to the original scenario")} (${nf(m.parametros.saturacion * 100)}%)</button>
+  </div>`;
+}
+function ponerLluvia(v) {
+  const m = S.meta.get(S.actual); if (!m) return;
+  const nuevo = v == null ? null : Math.round(Math.max(0, Math.min(1, v)) * 100) / 100;
+  if (nuevo === S.lluvia) return;
+  S.lluvia = nuevo;
+  for (const k of [...S.imagenes.keys()]) if (k.startsWith(`${S.actual}:riesgo_lluvia:`)) S.imagenes.delete(k);
+  pedirDibujo(); actualizarInspector();
+  const cl = cuadroLluvia(m), sl = $("#lluvia");
+  if (sl) {
+    if (document.activeElement !== sl) sl.value = Math.round(lluviaActual(m) * 100);
+    $("#lluvia-val").textContent = `${nf(lluviaActual(m) * 100)}%`;
+    $("#lluvia-pct").textContent = `${nf(cl[0], 1)}%`;
+    $("#lluvia-reset").hidden = S.lluvia == null;
+    cl.forEach((v, i) => { const e = document.querySelector(`[data-clase="lluvia-${i}"]`); if (e) e.textContent = `${nf(v, 1)}%`; });
+  }
+  pintarKpis(m); pintarAlertas(); pintarEstabilidad(m); programarGraficas();
 }
 function actualizarControlNivel(m) {
   const sl = $("#nivel"); if (!sl || !m) return;
@@ -405,7 +512,7 @@ function ponerNivel(v) {
   for (const k of [...S.imagenes.keys()]) if (k.startsWith(`${S.actual}:inundacion:`)) S.imagenes.delete(k);
   pedirDibujo(); actualizarInspector(); actualizarControlNivel(m);
   const g = $("#g-inund"); if (g._marcar) g._marcar(nivelActual(m));
-  programarGraficas();
+  pintarKpis(m); programarGraficas();
 }
 const lineaOriginal = m => ({ a: [...m.perfil.a], b: [...m.perfil.b], dims: `${m.filas}x${m.cols}` });
 let graficasPendientes = false;
@@ -424,7 +531,7 @@ const mapaVisible = () => { const r = $("#lienzo-cont").getBoundingClientRect();
 // ============================== MAPA: IMAGEN ================================
 function construirImagen() {
   const id = S.actual, m = S.meta.get(id);
-  const clave = `${id}:${S.capa}:${S.capa === "cambios" ? S.compararCon : S.capa === "inundacion" ? nivelActual(m).toFixed(3) : ""}`;
+  const clave = `${id}:${S.capa}:${S.capa === "cambios" ? S.compararCon : S.capa === "inundacion" ? nivelActual(m).toFixed(3) : S.capa === "riesgo_lluvia" ? lluviaActual(m).toFixed(3) : ""}`;
   if (S.imagenes.has(clave)) return S.imagenes.get(clave);
   const W = m.cols, H = m.filas, n = W * H;
   const sh = capaLista(id, "sombreado");
@@ -439,6 +546,7 @@ function construirImagen() {
   const k = m.kpis, rango = (k.zmax - k.zmin) || 1;
   const comp = cp.comp ? S.comp.get(`${S.compararCon}-${id}`) : null;
   let maxProf = 0;
+  const fsL = S.capa === "riesgo_lluvia" ? fsLluvia(m) : null;
   let prof = null;
   if (S.capa === "inundacion") {
     const nv = nivelActual(m); prof = new Float32Array(n);
@@ -471,7 +579,11 @@ function construirImagen() {
         break;
       }
       case "riesgo_seco": case "riesgo_lluvia": {
-        const cl = claseFS(datos[0][i]); c = cl.color; a = cl.a;
+        const f = fsL ? fsL[i] : datos[0][i], cl = claseFS(f); c = cl.color; a = cl.a;
+        // trama: rayas en lo inestable y puntos en lo crítico (se distingue sin depender del color)
+        const x = i % W, y = (i / W) | 0;
+        if (f < 1 && (x + y) % 5 < 2) c = c.map(v => v * .5);
+        else if (f >= 1 && f < 1.3 && x % 3 === 0 && y % 3 === 0) c = c.map(v => v * .55);
         break;
       }
       case "drenaje": {
@@ -619,13 +731,13 @@ function flecha(x0, y0, x1, y1, e, n) {
   ctx.beginPath(); ctx.moveTo(X1, Y1);
   ctx.lineTo(X1 - 14 * Math.cos(ang - .45), Y1 - 14 * Math.sin(ang - .45));
   ctx.lineTo(X1 - 14 * Math.cos(ang + .45), Y1 - 14 * Math.sin(ang + .45)); ctx.closePath(); ctx.fill();
-  const t = `Deslave ${n}`;
+  const txt = `${t("Deslave", "Landslide")} ${n}`;
   ctx.font = "700 12px system-ui, sans-serif";
-  const ancho = ctx.measureText(t).width + 14;
+  const ancho = ctx.measureText(txt).width + 14;
   ctx.fillStyle = "rgba(255,255,255,.95)"; ctx.strokeStyle = "rgba(0,0,0,.15)"; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.roundRect ? ctx.roundRect(X0 - ancho / 2, Y0 - 32, ancho, 22, 6) : ctx.rect(X0 - ancho / 2, Y0 - 32, ancho, 22);
   ctx.fill(); ctx.stroke();
-  ctx.fillStyle = "#b0281d"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(t, X0, Y0 - 21);
+  ctx.fillStyle = "#b0281d"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, X0, Y0 - 21);
   ctx.restore();
 }
 function barraEscala(m) {
@@ -741,19 +853,19 @@ function actualizarInspector() {
   const v = n => { const a = capaLista(id, n); return a ? a[i] : undefined; };
   const x = m.origen[0] + (c + .5) * m.celda, y = m.origen[1] + (m.filas - r - .5) * m.celda;
   const fila = (dt, dd) => `<dt>${dt}</dt><dd>${dd}</dd>`;
-  const fsTxt = f => { if (f === undefined) return "…"; const cl = claseFS(f); return `<i style="background:${rgb(cl.color)}"></i>${cl.nombre} <span class="sutil">FS ${nf(f, 2)}</span>`; };
+  const fsTxt = f => { if (f === undefined) return "…"; const cl = claseFS(f); return `<i style="${estiloFS(FS.indexOf(cl))}"></i>${cl.nombre} <span class="sutil">FS ${nf(f, 2)}</span>`; };
   const pend = v("pendiente"), ori = cardinal(v("orientacion")), prof = profundidad(id, i, nivelActual(m)), cu = v("cuencas");
-  let html = fila("Coordenadas", `<span class="sutil">X</span> ${nf(x)} <span class="sutil">Y</span> ${nf(y)}`)
-    + fila("Elevación", `${nf(v("elevacion"), 1)} m`)
-    + fila("Pendiente", pend === undefined ? "…" : `${nf(pend, 1)}°${ori && pend > 1 ? ` <span class="sutil">hacia el ${ori}</span>` : ""}`)
+  let html = fila(t("Coordenadas", "Coordinates"), `<span class="sutil">X</span> ${nf(x)} <span class="sutil">Y</span> ${nf(y)}`)
+    + fila(t("Elevación", "Elevation"), `${nf(v("elevacion"), 1)} m`)
+    + fila(t("Pendiente", "Slope"), pend === undefined ? "…" : `${nf(pend, 1)}°${ori && pend > 1 ? ` <span class="sutil">${t("hacia el", "facing")} ${ori}</span>` : ""}`)
     + `<div class="sep"></div>`
-    + fila("Estabilidad en seco", fsTxt(v("fs_seco")))
-    + fila("Con lluvia", fsTxt(v("fs_lluvia")))
+    + fila(t("Estabilidad en seco", "Stability when dry"), fsTxt(v("fs_seco")))
+    + fila(t(`Con lluvia (${nf(lluviaActual(m) * 100)}% mojado)`, `With rain (${nf(lluviaActual(m) * 100)}% wet)`), (() => { const a = fsLluvia(m); return fsTxt(a ? a[i] : undefined); })())
     + `<div class="sep"></div>`
-    + fila("Inundación", prof === undefined ? "…" : prof > 0 ? `<i style="background:var(--agua)"></i>${nf(prof, 1)} m de agua` : "No se inunda")
-    + fila("Cuenca", cu === undefined ? "…" : cu > 0 ? `<i style="background:${CUENCAS[(cu - 1) % 8]}"></i>Cuenca ${cu}` : "Cuenca menor");
+    + fila(t("Inundación", "Flooding"), prof === undefined ? "…" : prof > 0 ? `<i style="background:var(--agua)"></i>${nf(prof, 1)} ${t("m de agua", "m of water")}` : t("No se inunda", "Doesn’t flood"))
+    + fila(t("Cuenca", "Watershed"), cu === undefined ? "…" : cu > 0 ? `<i style="background:${CUENCAS[(cu - 1) % 8]}"></i>${t("Cuenca", "Watershed")} ${cu}` : t("Cuenca menor", "Minor watershed"));
   const dif = S.compararCon ? S.compCapa.get(`${S.compararCon}-${id}`) : null;
-  if (dif) html += fila(`Cambio vs #${S.compararCon}`, isNaN(dif[i]) ? "Sin cambio" : `<span style="color:${dif[i] < 0 ? "var(--riesgo)" : "var(--agua)"}">${dif[i] > 0 ? "+" : ""}${nf(dif[i], 1)} m</span>`);
+  if (dif) html += fila(`${t("Cambio vs", "Change vs")} #${S.compararCon}`, isNaN(dif[i]) ? t("Sin cambio", "No change") : `<span style="color:${dif[i] < 0 ? "var(--riesgo)" : "var(--agua)"}">${dif[i] > 0 ? "+" : ""}${nf(dif[i], 1)} m</span>`);
   dl.innerHTML = html; dl.hidden = false; vacio.hidden = true;
 }
 
@@ -792,7 +904,7 @@ function calcPerfil(m) {
   if (!z || !S.linea) return null;
   const W = m.cols, H = m.filas, [ax, ay] = S.linea.a, [bx, by] = S.linea.b;
   const n = Math.max(2, Math.min(500, Math.round(Math.hypot(bx - ax, by - ay)) + 1));
-  const fs = capaLista(id, "fs_lluvia"), nivel = nivelActual(m);
+  const fs = fsLluvia(m), nivel = nivelActual(m);
   const p = { dist: [], elev: [], agua: [], inestable: [] };
   let ult = NaN;
   for (let k = 0; k < n; k++) {
@@ -819,24 +931,25 @@ function fijarPuntoPerfil(frac, dist, avisar) {
   S.hover = { c: Math.round(ax + (bx - ax) * frac), r: Math.round(ay + (by - ay) * frac) };
   actualizarInspector(); pedirDibujo();
   if (avisar && !mapaVisible())
-    aviso(`<b>Punto marcado en el mapa</b><small>A ${fmtLen(dist)} del punto A. Sus datos aparecen junto al mapa.</small>`, { boton: "Ver en el mapa", accion: irAlMapa });
+    aviso(t(`<b>Punto marcado en el mapa</b><small>A ${fmtLen(dist)} del punto A. Sus datos aparecen junto al mapa.</small>`,
+      `<b>Point marked on the map</b><small>${fmtLen(dist)} from point A. Its data shows next to the map.</small>`), { boton: t("Ver en el mapa", "Show on map"), accion: irAlMapa });
 }
 
 function graficaPerfil(m, cont = $("#g-perfil"), mini = false) {
   cont.innerHTML = "";
   const p = calcPerfil(m) || m.perfil, n = p.dist.length;
   const zmin = Math.min(...p.elev), zmaxT = Math.max(...p.elev);
-  if (!mini) $("#perfil-sub").textContent = `A → B · ${fmtLen(p.dist[n - 1])} · desnivel ${nf(zmaxT - zmin)} m`;
+  if (!mini) $("#perfil-sub").textContent = `A → B · ${fmtLen(p.dist[n - 1])} · ${t("desnivel", "relief")} ${nf(zmaxT - zmin)} m`;
   const W = Math.max(mini ? 220 : 300, cont.clientWidth || 480), H = mini ? 150 : (W < 420 ? 240 : 230);
   const M = mini ? { l: 42, r: 8, t: 24, b: 22 } : { l: 66, r: 12, t: 30, b: 40 };
   const zmax = Math.max(...p.agua, zmaxT), marg = (zmax - zmin) * .08 || 1;
   const y0 = zmin - marg, y1 = zmax + marg, dmax = p.dist[n - 1] || 1;
   const X = d => M.l + d / dmax * (W - M.l - M.r), Y = z => H - M.b - (z - y0) / (y1 - y0) * (H - M.t - M.b);
-  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Perfil topográfico" }, cont);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": t("Perfil topográfico", "Topographic profile") }, cont);
   const idGr = mini ? "gArenaMini" : "gArena";
   const gr = el("linearGradient", { id: idGr, x1: 0, y1: 0, x2: 0, y2: 1 }, el("defs", {}, svg));
   el("stop", { offset: "0", "stop-color": "#d8b884" }, gr); el("stop", { offset: "1", "stop-color": "#a98557" }, gr);
-  ejes(svg, W, H, M, X, Y, marcas(0, dmax, mini ? 3 : 6), marcas(y0, y1, mini ? 3 : 4), mini ? "" : "Distancia (m)", mini ? "" : "Elevación (m)");
+  ejes(svg, W, H, M, X, Y, marcas(0, dmax, mini ? 3 : 6), marcas(y0, y1, mini ? 3 : 4), mini ? "" : t("Distancia (m)", "Distance (m)"), mini ? "" : t("Elevación (m)", "Elevation (m)"));
   const base = Y(y0);
   let dT = `M${X(0)},${base}`; p.elev.forEach((z, i) => dT += `L${X(p.dist[i]).toFixed(1)},${Y(z).toFixed(1)}`); dT += `L${X(dmax)},${base}Z`;
   let dA = ""; p.agua.forEach((z, i) => dA += `${i ? "L" : "M"}${X(p.dist[i]).toFixed(1)},${Y(z).toFixed(1)}`);
@@ -873,7 +986,7 @@ function graficaPerfil(m, cont = $("#g-perfil"), mini = false) {
     guia.setAttribute("x1", X(p.dist[i])); guia.setAttribute("x2", X(p.dist[i])); guia.setAttribute("opacity", .5);
     pt.setAttribute("cx", X(p.dist[i])); pt.setAttribute("cy", Y(p.elev[i])); pt.setAttribute("opacity", 1);
     const agua = p.agua[i] - p.elev[i];
-    tip.innerHTML = `${nf(p.dist[i])} m · ${nf(p.elev[i], 1)} m${agua > .05 ? ` · agua ${nf(agua, 1)} m` : ""}${p.inestable[i] ? " · inestable" : ""}`;
+    tip.innerHTML = `${nf(p.dist[i])} m · ${nf(p.elev[i], 1)} m${agua > .05 ? ` · ${t("agua", "water")} ${nf(agua, 1)} m` : ""}${p.inestable[i] ? ` · ${t("inestable", "unstable")}` : ""}`;
     tip.style.left = `${X(p.dist[i]) / W * r.width}px`; tip.style.top = `${Y(p.elev[i]) / H * r.height}px`; tip.style.opacity = 1;
     S.perfilHover = p.dist[i] / dmax; pedirDibujo();
   });
@@ -891,10 +1004,10 @@ function graficaInundacion(m) {
   const W = Math.max(300, cont.clientWidth || 480), H = W < 420 ? 240 : 230, M = { l: 60, r: 14, t: 30, b: 40 };
   const hmax = h[n - 1] || 1, amax = Math.min(100, Math.max(...a) * 1.12 || 1);
   const X = v => M.l + v / hmax * (W - M.l - M.r), Y = v => H - M.b - v / amax * (H - M.t - M.b);
-  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Curva de inundación" }, cont);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": t("Curva de inundación", "Flood curve") }, cont);
   const gr = el("linearGradient", { id: "gAgua", x1: 0, y1: 0, x2: 0, y2: 1 }, el("defs", {}, svg));
   el("stop", { offset: "0", "stop-color": "var(--agua)", "stop-opacity": .35 }, gr); el("stop", { offset: "1", "stop-color": "var(--agua)", "stop-opacity": .03 }, gr);
-  ejes(svg, W, H, M, X, Y, marcas(0, hmax, 6), marcas(0, amax, 4), "Nivel del agua sobre los ríos (m)", "Área inundada (%)", v => nf(v), v => `${nf(v)}%`);
+  ejes(svg, W, H, M, X, Y, marcas(0, hmax, 6), marcas(0, amax, 4), t("Nivel del agua sobre los ríos (m)", "Water level above the rivers (m)"), t("Área inundada (%)", "Flooded area (%)"), v => nf(v), v => `${nf(v)}%`);
   let d = ""; h.forEach((v, i) => d += `${i ? "L" : "M"}${X(v).toFixed(1)},${Y(a[i]).toFixed(1)}`);
   el("path", { d: `${d}L${X(hmax)},${Y(0)}L${X(0)},${Y(0)}Z`, fill: "url(#gAgua)" }, svg);
   el("path", { d, fill: "none", stroke: "var(--agua)", "stroke-width": 2.5, "stroke-linejoin": "round" }, svg);
@@ -909,7 +1022,7 @@ function graficaInundacion(m) {
     marca.setAttribute("x1", x); marca.setAttribute("x2", x);
     circ.setAttribute("cx", x); circ.setAttribute("cy", Y(pct));
     etq.setAttribute("x", x + (der ? -8 : 8)); etq.setAttribute("text-anchor", der ? "end" : "start");
-    etq.textContent = `En el mapa: ${nf(nv, 1)} m → ${nf(pct, 1)}%`;
+    etq.textContent = `${t("En el mapa", "On the map")}: ${nf(nv, 1)} m → ${nf(pct, 1)}%`;
   };
   marcar(nivelActual(m));
   cont._marcar = marcar;
@@ -930,14 +1043,15 @@ function graficaInundacion(m) {
     let i = 0; while (i < n - 1 && h[i] < v) i++;
     guia.setAttribute("x1", X(h[i])); guia.setAttribute("x2", X(h[i])); guia.setAttribute("opacity", .5);
     pt.setAttribute("cx", X(h[i])); pt.setAttribute("cy", Y(a[i])); pt.setAttribute("opacity", 1);
-    tip.textContent = `Si sube ${nf(h[i], 1)} m → ${nf(a[i], 1)}% inundado · toca para verlo en el mapa`;
+    tip.textContent = t(`Si sube ${nf(h[i], 1)} m → ${nf(a[i], 1)}% inundado · toca para verlo en el mapa`, `If it rises ${nf(h[i], 1)} m → ${nf(a[i], 1)}% flooded · tap to see it on the map`);
     tip.style.left = `${X(h[i]) / W * r.width}px`; tip.style.top = `${Y(a[i]) / H * r.height}px`; tip.style.opacity = 1;
   });
   const terminar = () => {
     if (!arrastrando) return;
     arrastrando = false;
     if (!mapaVisible())
-      aviso(`<b>Nivel del agua: ${nf(nivelActual(m), 1)} m</b><small>El mapa de inundación ya muestra este escenario.</small>`, { boton: "Ver en el mapa", accion: irAlMapa });
+      aviso(t(`<b>Nivel del agua: ${nf(nivelActual(m), 1)} m</b><small>El mapa de inundación ya muestra este escenario.</small>`,
+        `<b>Water level: ${nf(nivelActual(m), 1)} m</b><small>The flood map now shows this scenario.</small>`), { boton: t("Ver en el mapa", "Show on map"), accion: irAlMapa });
   };
   area.addEventListener("pointerup", terminar);
   area.addEventListener("pointercancel", () => { arrastrando = false; });
@@ -945,23 +1059,21 @@ function graficaInundacion(m) {
 }
 
 function pintarEstabilidad(m) {
-  const sat = Math.round(m.parametros.saturacion * 100);
-  const fila = (titulo, col, extra) => {
-    const inest = m.cuadro[0][col];
-    return `<div class="barra-apilada"><div class="barra-apilada-et"><span>${titulo}</span><span>${nf(inest, 1)}% inestable</span></div>
-      <div class="ba">${m.cuadro.map((c, i) => `<div class="${i >= 2 ? "claro" : ""}" style="flex-grow:${Math.max(c[col], .0001)};background:${rgb(FS[i].color)}" title="${FS[i].nombre}: ${nf(c[col], 1)}%">${c[col] >= 7 ? `${nf(c[col])}%` : ""}</div>`).join("")}</div>${extra || ""}</div>`;
-  };
-  $("#estabilidad").innerHTML = fila("Suelo seco", "seco") + fila(`Con lluvia · suelo ${sat}% saturado`, "lluvia")
-    + `<div class="estab-ley">${FS.map(c => `<span><i style="background:${rgb(c.color)}"></i><b>${c.nombre}</b> · ${c.rango}</span>`).join("")}</div>`;
+  const sat = Math.round(lluviaActual(m) * 100);
+  const fila = (titulo, pcts) => `<div class="barra-apilada"><div class="barra-apilada-et"><span>${titulo}</span><span>${nf(pcts[0], 1)}% ${t("inestable", "unstable")}</span></div>
+      <div class="ba">${pcts.map((v, i) => `<div class="${i >= 2 ? "claro" : ""}" style="flex-grow:${Math.max(v, .0001)};${estiloFS(i)}" title="${FS[i].nombre}: ${nf(v, 1)}%">${v >= 7 ? `<span>${nf(v)}%</span>` : ""}</div>`).join("")}</div></div>`;
+  $("#estabilidad").innerHTML = fila(t("Suelo seco", "Dry soil"), m.cuadro.map(c => c.seco))
+    + fila(t(`Con lluvia · suelo ${sat}% mojado`, `With rain · soil ${sat}% wet`) + (S.lluvia == null ? "" : t(" (elegido)", " (chosen)")), cuadroLluvia(m))
+    + `<div class="estab-ley">${FS.map((c, i) => `<span><i style="${estiloFS(i)}"></i><b>${c.nombre}</b> · ${c.rango}</span>`).join("")}</div>`;
 }
 
 function pintarCuencas(m) {
-  $("#cuencas-sub").textContent = `ríos: ${fmtLen(m.kpis.long_rios)}`;
+  $("#cuencas-sub").textContent = `${t("ríos", "rivers")}: ${fmtLen(m.kpis.long_rios)}`;
   const max = m.cuencas[0] ? m.cuencas[0].area : 1;
   $("#cuencas").innerHTML = m.cuencas.map((c, i) => `
     <div class="cuenca"><div class="cuenca-n" style="background:${CUENCAS[i]}">${c.n}</div>
-      <div><div class="cuenca-nom">Cuenca ${c.n}</div><div class="cuenca-barra"><div style="width:${c.area / max * 100}%;background:${CUENCAS[i]}"></div></div></div>
-      <div class="cuenca-area">${fmtArea(c.area)}<small>${nf(c.area / m.kpis.area * 100, 1)}% del terreno</small></div></div>`).join("");
+      <div><div class="cuenca-nom">${t("Cuenca", "Watershed")} ${c.n}</div><div class="cuenca-barra"><div style="width:${c.area / max * 100}%;background:${CUENCAS[i]}"></div></div></div>
+      <div class="cuenca-area">${fmtArea(c.area)}<small>${nf(c.area / m.kpis.area * 100, 1)}% ${t("del terreno", "of terrain")}</small></div></div>`).join("");
 }
 
 // ============================== CAMBIOS =====================================
@@ -969,8 +1081,8 @@ function pintarSelectorComparar() {
   const sel = $("#comparar-con");
   const m = S.meta.get(S.actual);
   const otras = S.capturas.filter(c => c.id !== S.actual);
-  sel.innerHTML = otras.length ? otras.map(c => `<option value="${c.id}" ${c.id === S.compararCon ? "selected" : ""}>#${c.id} · ${horaDe(c.hora)}${c.id === m.anterior ? " (anterior)" : ""}</option>`).join("")
-    : `<option>No hay otras capturas</option>`;
+  sel.innerHTML = otras.length ? otras.map(c => `<option value="${c.id}" ${c.id === S.compararCon ? "selected" : ""}>#${c.id} · ${horaDe(c.hora)}${c.id === m.anterior ? t(" (anterior)", " (previous)") : ""}</option>`).join("")
+    : `<option>${t("No hay otras capturas", "No other captures")}</option>`;
   sel.disabled = !otras.length;
 }
 $("#comparar-con").onchange = e => {
@@ -982,7 +1094,7 @@ async function cargarComparacion() {
   const id = S.actual, b = S.compararCon, tok = S.token;
   if (!b) { pintarCambios(null); pintarKpis(S.meta.get(id)); return; }
   const k = `${b}-${id}`;
-  $("#cambios").innerHTML = `<div class="vacio-mini"><span class="giro"></span>Comparando con la captura #${b}…</div>`;
+  $("#cambios").innerHTML = `<div class="vacio-mini"><span class="giro"></span>${t("Comparando con la captura", "Comparing with capture")} #${b}…</div>`;
   try {
     if (!S.comp.has(k)) S.comp.set(k, await getJSON(`/api/comparar/${b}/${id}`));
     const c = S.comp.get(k);
@@ -990,7 +1102,7 @@ async function cargarComparacion() {
       const buf = await (await fetch(`/api/comparar/${b}/${id}/capa`)).arrayBuffer();
       S.compCapa.set(k, new Float32Array(buf));
     }
-  } catch { if (tok === S.token) $("#cambios").innerHTML = `<div class="vacio-mini">No se pudo hacer la comparación.</div>`; return; }
+  } catch { if (tok === S.token) $("#cambios").innerHTML = `<div class="vacio-mini">${t("No se pudo hacer la comparación.", "Couldn’t compare the captures.")}</div>`; return; }
   if (tok !== S.token || b !== S.compararCon) return;
   const m = S.meta.get(id);
   pintarCambios(S.comp.get(k)); pintarKpis(m); pintarTabs(); pintarAlertas(); pintarLeyenda(); actualizarInspector();
@@ -999,26 +1111,26 @@ async function cargarComparacion() {
 function pintarCambios(c) {
   const cont = $("#cambios");
   const icoInfo = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>`;
-  if (!c) { cont.innerHTML = `<div class="vacio-mini">${icoInfo}<div><b>Aún no hay con qué comparar.</b><br>Mueve la arena y guarda otra captura en el SARndbox: aquí verás qué cambió y si hubo deslaves.</div></div>`; return; }
-  if (c.error) { cont.innerHTML = `<div class="vacio-mini">${icoInfo}<div>${esc(c.error)}</div></div>`; return; }
+  if (!c) { cont.innerHTML = `<div class="vacio-mini">${icoInfo}<div>${t("<b>Aún no hay con qué comparar.</b><br>Mueve la arena y guarda otra captura en el SARndbox: aquí verás qué cambió y si hubo deslaves.", "<b>Nothing to compare yet.</b><br>Move the sand and save another capture in the SARndbox: you’ll see here what changed and whether there were landslides.")}</div></div>`; return; }
+  if (c.error) { cont.innerHTML = `<div class="vacio-mini">${icoInfo}<div>${t(esc(c.error), "The captures have different sizes or don’t exist.")}</div></div>`; return; }
   const stats = `<div class="cambios-stats">
-    <div class="mini-stat"><b style="color:var(--riesgo)">${fmtVol(c.vol_erosion)}</b><span>Material perdido</span></div>
-    <div class="mini-stat"><b style="color:var(--agua)">${fmtVol(c.vol_deposito)}</b><span>Material acumulado</span></div>
-    <div class="mini-stat"><b>${fmtArea(c.area_cambio)}</b><span>Área modificada</span></div></div>`;
+    <div class="mini-stat"><b style="color:var(--riesgo)">${fmtVol(c.vol_erosion)}</b><span>${t("Material perdido", "Material lost")}</span></div>
+    <div class="mini-stat"><b style="color:var(--agua)">${fmtVol(c.vol_deposito)}</b><span>${t("Material acumulado", "Material piled up")}</span></div>
+    <div class="mini-stat"><b>${fmtArea(c.area_cambio)}</b><span>${t("Área modificada", "Area changed")}</span></div></div>`;
   let cuerpo;
   if (!c.eventos.length) {
     cuerpo = `<div class="vacio-mini">${icoInfo}<div>${c.area_cambio > 0
-      ? "Hubo cambios en el terreno, pero ninguno con el patrón de un deslave (material que se pierde arriba y se acumula justo abajo)."
-      : `Sin cambios desde la captura #${c.a}.`}</div></div>`;
+      ? t("Hubo cambios en el terreno, pero ninguno con el patrón de un deslave (material que se pierde arriba y se acumula justo abajo).", "The terrain changed, but nothing with the pattern of a landslide (material lost uphill and piled up just below).")
+      : t(`Sin cambios desde la captura #${c.a}.`, `No changes since capture #${c.a}.`)}</div></div>`;
   } else {
     cuerpo = `<div class="eventos">${c.eventos.map((ev, i) => `
-      <div class="evento"><div class="evento-cab"><b>Deslave ${i + 1}</b>
-        <span class="chip ${ev.en_riesgo > .3 ? "rojo" : ""}">${ev.en_riesgo > .3 ? "Zona ya marcada en riesgo" : "Fuera de la zona marcada"}</span></div>
-        <dl><dt>Volumen desplazado</dt><dd>${fmtVol(ev.vol_perdido)}</dd>
-          <dt>Recorrido</dt><dd>${fmtLen(ev.desplazamiento)}</dd>
-          <dt>Desnivel</dt><dd>${nf(ev.caida)} m</dd>
-          <dt>Pendiente de origen</dt><dd>${nf(ev.pend_origen)}°</dd></dl>
-        <button class="btn btn-sec btn-ch" data-ev="${i}">Ver en el mapa</button></div>`).join("")}</div>`;
+      <div class="evento"><div class="evento-cab"><b>${t("Deslave", "Landslide")} ${i + 1}</b>
+        <span class="chip ${ev.en_riesgo > .3 ? "rojo" : ""}">${ev.en_riesgo > .3 ? t("Zona ya marcada en riesgo", "Area already marked at risk") : t("Fuera de la zona marcada", "Outside the marked area")}</span></div>
+        <dl><dt>${t("Volumen desplazado", "Volume moved")}</dt><dd>${fmtVol(ev.vol_perdido)}</dd>
+          <dt>${t("Recorrido", "Distance traveled")}</dt><dd>${fmtLen(ev.desplazamiento)}</dd>
+          <dt>${t("Desnivel", "Drop")}</dt><dd>${nf(ev.caida)} m</dd>
+          <dt>${t("Pendiente de origen", "Starting slope")}</dt><dd>${nf(ev.pend_origen)}°</dd></dl>
+        <button class="btn btn-sec btn-ch" data-ev="${i}">${t("Ver en el mapa", "Show on map")}</button></div>`).join("")}</div>`;
   }
   cont.innerHTML = stats + cuerpo;
   cont.querySelectorAll("[data-ev]").forEach(b => b.onclick = () => verEvento(c.eventos[+b.dataset.ev]));
@@ -1035,8 +1147,11 @@ async function verEvento(ev) {
 
 function pintarPie(m) {
   const p = m.parametros;
-  $("#pie").innerHTML = `Escala: 1 cm de arena = ${nf(p.metros_por_cm, 1)} m · exageración vertical ${nf(p.escala_vertical, 1)} · suelo: cohesión ${nf(p.cohesion_kpa, 1)} kPa, fricción ${nf(p.friccion_grados)}°, peso ${nf(p.peso_suelo_kn_m3)} kN/m³, espesor ${nf(p.espesor_suelo_m, 1)} m.<br>
-    Modelo educativo: los resultados dependen de la escala y del tipo de suelo configurados en el analizador. Los datos descargados se abren en QGIS o ArcGIS.`;
+  $("#pie").innerHTML = t(
+    `Escala: 1 cm de arena = ${nf(p.metros_por_cm, 1)} m · exageración vertical ${nf(p.escala_vertical, 1)} · suelo: cohesión ${nf(p.cohesion_kpa, 1)} kPa, fricción ${nf(p.friccion_grados)}°, peso ${nf(p.peso_suelo_kn_m3)} kN/m³, espesor ${nf(p.espesor_suelo_m, 1)} m.<br>
+    Modelo educativo: los resultados dependen de la escala y del tipo de suelo (se cambian en Configuración, el botón del engrane). Los datos descargados se abren en QGIS o ArcGIS.`,
+    `Scale: 1 cm of sand = ${nf(p.metros_por_cm, 1)} m · vertical exaggeration ${nf(p.escala_vertical, 1)} · soil: cohesion ${nf(p.cohesion_kpa, 1)} kPa, friction ${nf(p.friccion_grados)}°, unit weight ${nf(p.peso_suelo_kn_m3)} kN/m³, thickness ${nf(p.espesor_suelo_m, 1)} m.<br>
+    Educational model: results depend on the scale and soil type (change them in Settings, the gear button). Downloaded data opens in QGIS or ArcGIS.`);
 }
 
 // ============================== AVISOS Y MODAL ==============================
@@ -1053,13 +1168,135 @@ function abrirModal() {
   const urls = S.urls.length ? S.urls : [S.local];
   $("#qr").src = `/api/qr.svg?t=${Date.now()}`;
   $("#url-principal").textContent = urls[0];
-  $("#url-otras").innerHTML = urls.length > 1 ? `También: ${urls.slice(1).map(u => `<code>${esc(u)}</code>`).join(", ")}` : "";
+  $("#url-otras").innerHTML = urls.length > 1 ? `${t("También", "Also")}: ${urls.slice(1).map(u => `<code>${esc(u)}</code>`).join(", ")}` : "";
   $("#modal").hidden = false;
   $("#copiar").focus();
 }
 const cerrarModal = () => { $("#modal").hidden = true; };
+
+// ============================== CONFIGURACIÓN ===============================
+// Idioma (solo este dispositivo), escala y tipo de suelo (para todos: los guarda el servidor).
+const TIPOS_SUELO = [
+  { id: "tipico", es: "Suelo típico", en: "Typical soil", v: { cohesion_kpa: 5, friccion_grados: 32, peso_suelo_kn_m3: 19 } },
+  { id: "arena", es: "Arena suelta", en: "Loose sand", v: { cohesion_kpa: 0, friccion_grados: 30, peso_suelo_kn_m3: 17 } },
+  { id: "compacta", es: "Arena compacta", en: "Dense sand", v: { cohesion_kpa: 0, friccion_grados: 38, peso_suelo_kn_m3: 20 } },
+  { id: "arcilla", es: "Arcilla", en: "Clay", v: { cohesion_kpa: 20, friccion_grados: 20, peso_suelo_kn_m3: 18 } },
+  { id: "roca", es: "Roca alterada", en: "Weathered rock", v: { cohesion_kpa: 50, friccion_grados: 38, peso_suelo_kn_m3: 22 } },
+];
+const CAMPOS = ["metros_por_cm", "escala_vertical", "cohesion_kpa", "friccion_grados", "peso_suelo_kn_m3", "espesor_suelo_m"];
+let AJ = null;  // lo que respondió el servidor: valores, base, límites, puede_editar
+const campo = k => $(`#aj-${k}`);
+const puedeEditar = () => !!(AJ && AJ.puede_editar);
+const numTxt = v => String(+(+v).toFixed(4));
+function leerFormulario() {
+  const v = {};
+  for (const k of CAMPOS) v[k] = campo(k).value.trim() === "" ? NaN : +campo(k).value;
+  return v;
+}
+function etiquetaCampo(k) { const l = $(`label[for="aj-${k}"]`); return (l.querySelector("span") || l).textContent.trim(); }
+function revisarFormulario() {
+  if (!AJ) return null;
+  const v = leerFormulario(); let error = null;
+  for (const k of CAMPOS) {
+    const [lo, hi] = AJ.limites[k], ok = isFinite(v[k]) && v[k] >= lo && v[k] <= hi;
+    campo(k).setAttribute("aria-invalid", String(!ok));
+    if (!ok && !error) error = t(`“${etiquetaCampo(k)}” debe ser un número entre ${nf(lo, lo % 1 ? 1 : 0)} y ${nf(hi)}.`,
+                                 `“${etiquetaCampo(k)}” must be a number between ${nf(lo, lo % 1 ? 1 : 0)} and ${nf(hi)}.`);
+  }
+  pintarTipos(); ejemploEscala();
+  return error;
+}
+function mostrarErrorAjustes(txt) { const e = $("#aj-error"); e.textContent = txt || ""; e.hidden = !txt; }
+function pintarTipos() {
+  const v = leerFormulario();
+  $("#aj-tipos").innerHTML = TIPOS_SUELO.map(ts => {
+    const activo = Object.entries(ts.v).every(([k, x]) => Math.abs(v[k] - x) < 1e-6);
+    return `<button type="button" class="aj-tipo" data-tipo="${ts.id}" aria-pressed="${activo}" ${puedeEditar() ? "" : "disabled"}>${t(ts.es, ts.en)}</button>`;
+  }).join("");
+  $("#aj-tipos").querySelectorAll("[data-tipo]").forEach(b => b.onclick = () => {
+    const ts = TIPOS_SUELO.find(x => x.id === b.dataset.tipo);
+    for (const [k, x] of Object.entries(ts.v)) campo(k).value = x;
+    if (!revisarFormulario()) mostrarErrorAjustes("");
+  });
+}
+// Ejemplo en palabras de lo que significa la escala elegida
+function ejemploEscala() {
+  const v = leerFormulario(), m = S.meta.get(S.actual), el = $("#aj-ejemplo-escala");
+  if (!(v.metros_por_cm > 0)) { el.textContent = ""; return; }
+  const alto = 10 * v.metros_por_cm * (v.escala_vertical > 0 ? v.escala_vertical : 1);
+  let txt = t(`Un montón de 10 cm de arena sería un cerro de ${fmtLen(alto)}.`, `A 10 cm pile of sand would be a ${fmtLen(alto)} hill.`);
+  if (m) {
+    const f = v.metros_por_cm / m.parametros.metros_por_cm;
+    txt += " " + t(`Todo el sandbox mediría ${fmtLen(m.cols * m.celda * f)} × ${fmtLen(m.filas * m.celda * f)}.`,
+                   `The whole sandbox would be ${fmtLen(m.cols * m.celda * f)} × ${fmtLen(m.filas * m.celda * f)}.`);
+  }
+  el.textContent = txt;
+}
+function llenarFormulario(valores) {
+  for (const k of CAMPOS) campo(k).value = valores ? numTxt(valores[k]) : "";
+  revisarFormulario();
+}
+async function abrirAjustes() {
+  const md = $("#modal-ajustes");
+  md.hidden = false;
+  document.querySelector(`input[name="idioma"][value="${IDIOMA}"]`).checked = true;
+  mostrarErrorAjustes("");
+  try { AJ = await getJSON("/api/ajustes"); } catch { AJ = null; }
+  const ok = puedeEditar();
+  for (const k of CAMPOS) {
+    campo(k).disabled = !ok;
+    if (AJ) { campo(k).min = AJ.limites[k][0]; campo(k).max = AJ.limites[k][1]; }
+  }
+  llenarFormulario(AJ && AJ.valores);
+  $("#aj-bloqueado").hidden = !AJ || ok;
+  $("#aj-restablecer").hidden = !ok;
+  if (!AJ) mostrarErrorAjustes(t("No se pudo leer la configuración del servidor. Solo puedes cambiar el idioma.", "Couldn’t read the settings from the server. You can only change the language."));
+  document.querySelector(`input[name="idioma"]:checked`).focus();
+}
+$("#btn-ajustes").onclick = abrirAjustes;
+CAMPOS.forEach(k => campo(k).addEventListener("input", () => { if (!revisarFormulario()) mostrarErrorAjustes(""); }));
+$("#aj-restablecer").onclick = () => { if (AJ) { llenarFormulario(AJ.base); mostrarErrorAjustes(""); } };
+$("#form-ajustes").onsubmit = async e => {
+  e.preventDefault();
+  const idioma = document.querySelector(`input[name="idioma"]:checked`).value;
+  let cambio = false;
+  if (puedeEditar()) {
+    const error = revisarFormulario();
+    if (error) { mostrarErrorAjustes(error); return; }
+    const v = leerFormulario();
+    cambio = CAMPOS.some(k => Math.abs(v[k] - AJ.valores[k]) > 1e-9);
+    if (cambio) {
+      const b = $("#aj-guardar"); b.disabled = true; b.textContent = t("Guardando…", "Saving…");
+      try {
+        const r = await fetch("/api/ajustes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ valores: v }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error === "solo_local" ? t("Solo se puede cambiar desde la computadora del sandbox.", "It can only be changed from the sandbox computer.") : (d.error || r.status));
+      } catch (err) {
+        mostrarErrorAjustes(t(`No se pudo guardar: ${err.message}`, `Couldn’t save: ${err.message}`));
+        return;
+      } finally { b.disabled = false; b.textContent = t("Guardar", "Save"); }
+    }
+  }
+  if (idioma !== IDIOMA) {
+    try { localStorage.setItem("idioma", idioma); } catch { }
+    location.reload();
+    return;
+  }
+  $("#modal-ajustes").hidden = true;
+};
+// Cuando alguien cambia la escala o el suelo, todo se vuelve a calcular
+function ajustesCambiados() {
+  S.meta.clear(); S.capas.clear(); S.imagenes.clear(); S.comp.clear(); S.compCapa.clear();
+  cachePct.clear(); cacheFS = { clave: "", arr: null };
+  S.nivel = null; S.lluvia = null; S.perfilFijo = null;  // estaban en metros de la escala anterior
+  aviso(t("<b>Cambió la configuración</b><small>Volviendo a analizar las capturas con la nueva escala y suelo…</small>",
+          "<b>Settings changed</b><small>Re-analyzing the captures with the new scale and soil…</small>"));
+  refrescarLista().then(() => { if (S.actual && S.capturas.some(c => c.id === S.actual)) seleccionar(S.actual); }).catch(() => {});
+}
+
 $("#btn-conectar").onclick = abrirModal;
-$("#modal").addEventListener("click", e => { if (e.target.hasAttribute("data-cerrar")) cerrarModal(); });
+document.querySelectorAll(".modal").forEach(md => md.addEventListener("click", e => { if (e.target.closest("[data-cerrar]")) md.hidden = true; }));
+const modalAbierto = () => [...document.querySelectorAll(".modal")].find(md => !md.hidden);
 $("#copiar").onclick = async () => {
   const t = $("#url-principal").textContent;
   try { await navigator.clipboard.writeText(t); }
@@ -1067,11 +1304,11 @@ $("#copiar").onclick = async () => {
     const r = document.createRange(); r.selectNodeContents($("#url-principal"));
     const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand("copy");
   }
-  $("#copiar").textContent = "¡Copiado!"; setTimeout(() => $("#copiar").textContent = "Copiar", 1600);
+  $("#copiar").textContent = t("¡Copiado!", "Copied!"); setTimeout(() => $("#copiar").textContent = t("Copiar", "Copy"), 1600);
 };
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") cerrarModal();
-  if (e.target.matches("input, select, textarea") || !$("#modal").hidden) return;
+  if (e.key === "Escape") { const md = modalAbierto(); if (md) md.hidden = true; }
+  if (e.target.matches("input, select, textarea") || modalAbierto()) return;
   const i = S.capturas.findIndex(c => c.id === S.actual);
   if (e.key === "ArrowLeft" && S.capturas[i + 1]) { ponerSeguir(false); seleccionar(S.capturas[i + 1].id); }
   if (e.key === "ArrowRight" && i > 0) { seleccionar(S.capturas[i - 1].id); }
@@ -1088,30 +1325,31 @@ function conectarEventos() {
     await refrescarLista();
     if (reconexion && S.seguir && S.capturas[0] && S.capturas[0].id !== antes) seleccionar(S.capturas[0].id);
   });
-  es.addEventListener("analizando", () => { ponerEstado("analizando", "Analizando captura…"); esqueletoHistorial(); });
+  es.addEventListener("analizando", () => { ponerEstado("analizando", t("Analizando captura…", "Analyzing capture…")); esqueletoHistorial(); });
   es.addEventListener("actualizado", () => refrescarLista());
-  es.addEventListener("fallo", e => { estadoNormal(); aviso(`<b>Atención</b>${esc(JSON.parse(e.data).mensaje)}`, { tipo: "rojo" }); refrescarLista(); });
+  es.addEventListener("ajustes", ajustesCambiados);
+  es.addEventListener("fallo", e => { estadoNormal(); aviso(`<b>${t("Atención", "Heads up")}</b>${t(esc(JSON.parse(e.data).mensaje), "Couldn’t read the latest SARndbox capture.")}`, { tipo: "rojo" }); refrescarLista(); });
   es.addEventListener("nueva_captura", async e => {
     const { id } = JSON.parse(e.data);
     await refrescarLista();
     pintarHistorial(id);
     const c = S.capturas.find(x => x.id === id);
     const des = c && c.resumen && c.resumen.deslaves;
-    const texto = `<b>Nueva captura #${id}</b><small>${des ? `${des} deslave${des > 1 ? "s" : ""} detectado${des > 1 ? "s" : ""}` : "Análisis listo"}</small>`;
+    const texto = `<b>${t("Nueva captura", "New capture")} #${id}</b><small>${des ? `${des} ${t(pl(des, "deslave detectado", "deslaves detectados"), pl(des, "landslide detected", "landslides detected"))}` : t("Análisis listo", "Analysis ready")}</small>`;
     if (S.seguir || S.actual == null) { seleccionar(id); aviso(texto, { tipo: des ? "rojo" : "" }); }
-    else aviso(texto, { boton: "Ver", accion: () => { ponerSeguir(true); seleccionar(id); }, tipo: des ? "rojo" : "" });
+    else aviso(texto, { boton: t("Ver", "View"), accion: () => { ponerSeguir(true); seleccionar(id); }, tipo: des ? "rojo" : "" });
   });
   es.onerror = () => { S.conectado = false; estadoNormal(); };
 }
 
 setInterval(() => {
   document.querySelectorAll("[data-rel]").forEach(e => e.textContent = relativo(e.dataset.rel));
-  const m = S.meta.get(S.actual); if (m) $("#cab-meta").textContent = `${fechaLarga(m.hora)} · ${relativo(m.hora)} · ${m.fuente}`;
+  const m = S.meta.get(S.actual); if (m) $("#cab-meta").textContent = `${fechaLarga(m.hora)} · ${relativo(m.hora)} · ${fuenteTxt(m.fuente)}`;
 }, 30000);
 
 // ============================== INICIO ======================================
 (async function iniciar() {
-  try { await refrescarLista(); } catch { ponerEstado("caido", "Sin conexión"); }
+  try { await refrescarLista(); } catch { ponerEstado("caido", t("Sin conexión", "Offline")); }
   conectarEventos();
   const pedida = +new URLSearchParams(location.search).get("captura");
   if (pedida && S.capturas.some(c => c.id === pedida)) { if (pedida !== S.capturas[0].id) ponerSeguir(false); seleccionar(pedida); }

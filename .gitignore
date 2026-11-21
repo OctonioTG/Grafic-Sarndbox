@@ -5,6 +5,9 @@ historial_simulacion/
 analisis/
 panel/analisis/
 
+# Escala y suelo cambiados desde la ventana de Configuración del panel
+panel/ajustes_panel.json
+
 # Python
 __pycache__/
 *.pyc

@@ -57,6 +57,17 @@ import matplotlib.pyplot as plt  # noqa: E402
 WEB = os.path.join(AQUI, "web")
 MAX_HISTORIAL = 60          # capturas que se muestran en el historial
 MAX_EN_MEMORIA = 6          # análisis completos guardados en memoria
+ARCHIVO_AJUSTES = os.path.join(AQUI, "ajustes_panel.json")  # lo que se cambia desde Configuración
+
+# Lo que se puede cambiar desde la ventana de Configuración del panel: (mínimo, máximo)
+AJUSTABLES = {
+    "metros_por_cm": (0.1, 1000.0),
+    "escala_vertical": (0.1, 10.0),
+    "cohesion_kpa": (0.0, 200.0),
+    "friccion_grados": (5.0, 60.0),
+    "peso_suelo_kn_m3": (10.0, 30.0),
+    "espesor_suelo_m": (0.1, 50.0),
+}
 
 # ============================ DATOS ==========================================
 
@@ -83,6 +94,9 @@ class Almacen:
 
     def __init__(self, cfg, carpeta_historial):
         self.cfg = cfg
+        self.cfg_base = dict(cfg)            # valores de fábrica + sandbox.conf (para "restablecer")
+        self.version = 0                     # sube cada vez que cambian los ajustes
+        self.ajustes_remotos = False         # ¿otros equipos pueden cambiar los ajustes?
         self.carpeta = carpeta_historial
         os.makedirs(carpeta_historial, exist_ok=True)
         self.lock = threading.RLock()
@@ -101,13 +115,15 @@ class Almacen:
                 q.put(msg)
 
     # ---------- capturas ----------
-    def agregar(self, z, celda, fuente, ruta=None, hora=None, avisar=True, resumir=True):
+    def agregar(self, z_cm, celda_cm, fuente, ruta=None, hora=None, avisar=True, resumir=True):
+        """Guarda la captura tal como la midió el sandbox (en cm de arena), para
+        poder volver a convertirla a metros si cambian la escala."""
         with self.lock:
             cid = self.siguiente_id
             self.siguiente_id += 1
             self.capturas[cid] = {
                 "id": cid, "hora": hora or dt.datetime.now(), "fuente": fuente, "ruta": ruta,
-                "z": z.astype(np.float32), "celda": float(celda), "resumen": None,
+                "z_cm": z_cm.astype(np.float32), "celda_cm": float(celda_cm), "resumen": None,
             }
             while len(self.capturas) > MAX_HISTORIAL:
                 self.capturas.popitem(last=False)
@@ -117,10 +133,20 @@ class Almacen:
             self.avisar("nueva_captura", {"id": cid})
         return cid
 
+    def metros(self, info, cfg=None):
+        """Elevación (m) y tamaño de celda (m) de una captura con la escala actual."""
+        z, celda = at.a_metros(info["z_cm"].astype(np.float64), info["celda_cm"], cfg or self.cfg)
+        return z, float(celda)
+
     def _resumir(self, cid):
         """Calcula el análisis y un resumen corto para el historial."""
+        version = self.version
         r = self.obtener(cid)
+        if r is None:
+            return
         ids = list(self.capturas)
+        if cid not in ids:
+            return
         pos = ids.index(cid)
         deslaves = None
         if pos > 0:
@@ -128,6 +154,8 @@ class Almacen:
             deslaves = None if comp is None else len(comp["eventos"])
         k = r["kpis"]
         with self.lock:
+            if version != self.version or cid not in self.capturas:
+                return  # cambiaron los ajustes mientras se calculaba
             self.capturas[cid]["resumen"] = {
                 "inestable_lluvia": k["inestable_sat_pct"], "inundable": k["inund_pct"],
                 "zmax": k["zmax"], "deslaves": deslaves,
@@ -139,12 +167,16 @@ class Almacen:
                 self.analisis.move_to_end(cid)
                 return self.analisis[cid]
             info = self.capturas.get(cid)
+            cfg, version = self.cfg, self.version
         if info is None:
             return None
-        res = at.calcular(info["z"].astype(np.float64), info["celda"], self.cfg)
-        res["sombreado"] = LightSource(315, 45).hillshade(res["z"], vert_exag=1, dx=info["celda"], dy=info["celda"])
+        z, celda = self.metros(info, cfg)
+        res = at.calcular(z, celda, cfg)
+        res["sombreado"] = LightSource(315, 45).hillshade(res["z"], vert_exag=1, dx=celda, dy=celda)
         res["curvas"] = curvas_de_nivel(res["z"])
         with self.lock:
+            if version != self.version:
+                return res  # se calculó con ajustes viejos: se usa, pero no se guarda
             self.analisis[cid] = res
             while len(self.analisis) > MAX_EN_MEMORIA:
                 self.analisis.popitem(last=False)
@@ -156,10 +188,17 @@ class Almacen:
             if clave in self.comparaciones:
                 return self.comparaciones[clave]
             ia, ib = self.capturas.get(a), self.capturas.get(b)
+            cfg, version = self.cfg, self.version
         if ia is None or ib is None:
             return None
-        res = at.comparar(ia["z"].astype(np.float64), ib["z"].astype(np.float64), ib["celda"], self.cfg)
+        if ia["z_cm"].shape != ib["z_cm"].shape:
+            return None
+        za, _ = self.metros(ia, cfg)
+        zb, celda = self.metros(ib, cfg)
+        res = at.comparar(za, zb, celda, cfg)
         with self.lock:
+            if version != self.version:
+                return res
             self.comparaciones[clave] = res
             while len(self.comparaciones) > MAX_EN_MEMORIA:
                 self.comparaciones.popitem(last=False)
@@ -169,7 +208,7 @@ class Almacen:
         with self.lock:
             return [{"id": c["id"], "hora": c["hora"].isoformat(timespec="seconds"),
                      "fuente": c["fuente"], "resumen": c["resumen"],
-                     "filas": c["z"].shape[0], "cols": c["z"].shape[1]}
+                     "filas": c["z_cm"].shape[0], "cols": c["z_cm"].shape[1]}
                     for c in reversed(self.capturas.values())]
 
     def cargar_historial(self):
@@ -178,7 +217,7 @@ class Almacen:
         for f in archivos:
             ruta = os.path.join(self.carpeta, f)
             try:
-                z, celda = at.cargar_terreno(ruta, self.cfg)
+                z, celda = at.leer_dem_sarndbox(ruta)
                 m = re.search(r"(\d{8})_(\d{6})", f)
                 hora = dt.datetime.strptime("".join(m.groups()), "%Y%m%d%H%M%S") if m else None
                 self.agregar(z, celda, "SARndbox", ruta, hora, avisar=False, resumir=False)
@@ -186,16 +225,93 @@ class Almacen:
                 print(f"  No pude leer {f}: {e}")
         if self.capturas:
             print(f"  {len(self.capturas)} captura(s) recuperadas del historial.")
+            self.resumir_en_fondo()
 
-            def resumir_todo():  # en segundo plano, de la más nueva a la más vieja
-                for cid in reversed(list(self.capturas)):
-                    try:
-                        if self.capturas.get(cid, {}).get("resumen") is None:
-                            self._resumir(cid)
-                            self.avisar("actualizado", {"id": cid})
-                    except Exception as e:
-                        print(f"  No pude analizar la captura {cid}: {e}")
-            threading.Thread(target=resumir_todo, daemon=True).start()
+    def resumir_en_fondo(self):
+        """Analiza en segundo plano las capturas sin resumen, de la más nueva a la más vieja."""
+        version = self.version
+
+        def resumir_todo():
+            for cid in reversed(list(self.capturas)):
+                if version != self.version:
+                    return  # cambiaron los ajustes: otro hilo se encarga
+                try:
+                    if self.capturas.get(cid, {}).get("resumen") is None:
+                        self._resumir(cid)
+                        self.avisar("actualizado", {"id": cid})
+                except Exception as e:
+                    print(f"  No pude analizar la captura {cid}: {e}")
+        threading.Thread(target=resumir_todo, daemon=True).start()
+
+    # ---------- ajustes (escala y suelo) ----------
+    def ajustes(self):
+        return {k: self.cfg[k] for k in AJUSTABLES}
+
+    def cambiar_ajustes(self, nuevos):
+        """Aplica los ajustes, los guarda en disco y vuelve a analizar todo.
+        nuevos = None regresa a los valores de fábrica / sandbox.conf."""
+        if nuevos is None:
+            valores = {k: self.cfg_base[k] for k in AJUSTABLES}
+        else:
+            valores = validar_ajustes(nuevos, self.ajustes())
+        with self.lock:
+            cfg = dict(self.cfg)
+            cfg.update(valores)
+            self.cfg = cfg
+            self.version += 1
+            self.analisis.clear()
+            self.comparaciones.clear()
+            for c in self.capturas.values():
+                c["resumen"] = None
+        try:
+            if nuevos is None:
+                if os.path.exists(ARCHIVO_AJUSTES):
+                    os.remove(ARCHIVO_AJUSTES)
+            else:
+                cambiados = {k: v for k, v in valores.items() if v != self.cfg_base[k]}
+                if cambiados:
+                    with open(ARCHIVO_AJUSTES, "w", encoding="utf-8") as f:
+                        json.dump(cambiados, f, indent=2)
+                elif os.path.exists(ARCHIVO_AJUSTES):
+                    os.remove(ARCHIVO_AJUSTES)  # quedó todo como de fábrica
+        except OSError as e:
+            print(f"No pude guardar los ajustes en {ARCHIVO_AJUSTES}: {e}")
+        print(f"[{dt.datetime.now():%H:%M:%S}] Ajustes cambiados desde el panel: {valores}")
+        self.avisar("ajustes", valores)
+        self.resumir_en_fondo()
+        return valores
+
+
+def validar_ajustes(nuevos, actuales):
+    """Revisa que cada valor sea un número dentro de su rango. Lanza ValueError si no."""
+    if not isinstance(nuevos, dict):
+        raise ValueError("Formato inválido")
+    valores = dict(actuales)
+    for k, v in nuevos.items():
+        if k not in AJUSTABLES:
+            continue
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            raise ValueError(f"{k}: no es un número")
+        lo, hi = AJUSTABLES[k]
+        if not np.isfinite(v) or v < lo or v > hi:
+            raise ValueError(f"{k}: debe estar entre {lo:g} y {hi:g}")
+        valores[k] = v
+    return valores
+
+
+def cargar_ajustes_guardados(cfg):
+    """Los ajustes que se cambiaron desde el panel ganan sobre sandbox.conf."""
+    if not os.path.exists(ARCHIVO_AJUSTES):
+        return
+    try:
+        with open(ARCHIVO_AJUSTES, encoding="utf-8") as f:
+            guardados = json.load(f)
+        cfg.update(validar_ajustes(guardados, {k: cfg[k] for k in AJUSTABLES}))
+        print(f"  Usando los ajustes guardados desde el panel ({os.path.basename(ARCHIVO_AJUSTES)}).")
+    except Exception as e:
+        print(f"  No pude leer {ARCHIVO_AJUSTES} ({e}); uso los valores normales.")
 
 
 def curvas_de_nivel(z):
@@ -320,11 +436,19 @@ def miniatura_png(alm, cid):
         info = alm.capturas.get(cid)
     if info is None:
         return None
-    z = info["z"].astype(np.float64)
+    z, celda = alm.metros(info)
     paso = max(1, z.shape[1] // 160)
     z = z[::paso, ::paso]
-    rgb = LightSource(315, 45).shade(z, cmap=plt.get_cmap("gist_earth"), vert_exag=1,
-                                     dx=info["celda"] * paso, dy=info["celda"] * paso, blend_mode="soft")
+    # Mismos colores y sombreado que el mapa "Relieve" del panel (RAMPA.relieve en app.js)
+    paradas = [(0, (42, 96, 135)), (.1, (74, 148, 140)), (.26, (126, 178, 108)), (.44, (206, 204, 138)),
+               (.62, (198, 158, 100)), (.8, (148, 108, 78)), (.93, (192, 178, 168)), (1, (250, 250, 247))]
+    t = (z - np.nanmin(z)) / ((np.nanmax(z) - np.nanmin(z)) or 1)
+    t = np.nan_to_num(t, nan=0.0)
+    xs = [q[0] for q in paradas]
+    color = np.stack([np.interp(t, xs, [q[1][j] for q in paradas]) for j in range(3)], axis=-1) / 255
+    luz = LightSource(315, 45).hillshade(np.nan_to_num(z, nan=float(np.nanmin(z))), vert_exag=1,
+                                          dx=celda * paso, dy=celda * paso)
+    rgb = np.clip(color * (.5 + .62 * luz)[..., None], 0, 1)
     buf = io.BytesIO()
     plt.imsave(buf, rgb, format="png")
     return buf.getvalue()
@@ -405,7 +529,9 @@ def crear_manejador(alm, puerto):
             if ruta == "/api/estado":
                 urls = [f"http://{ip}:{puerto}" for ip in ips_locales()]
                 return self.json({"capturas": alm.lista(), "urls": urls, "fuente": alm.estado_fuente,
-                                  "local": f"http://localhost:{puerto}"})
+                                  "local": f"http://localhost:{puerto}", "version": alm.version})
+            if ruta == "/api/ajustes":
+                return self.json(self.info_ajustes())
             if ruta == "/api/qr.svg":
                 urls = [f"http://{ip}:{puerto}" for ip in ips_locales()] or [f"http://localhost:{puerto}"]
                 return self.enviar(qr.qr_svg(urls[0]), "image/svg+xml")
@@ -442,6 +568,38 @@ def crear_manejador(alm, puerto):
                 d = np.where(np.abs(c["dif"]) > c["lod"], c["dif"], np.nan).astype("<f4")
                 return self.enviar(d.tobytes(), "application/octet-stream")
             return self.no_encontrado()
+
+        def puede_editar(self):
+            return alm.ajustes_remotos or self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+        def info_ajustes(self):
+            return {"valores": alm.ajustes(), "base": {k: alm.cfg_base[k] for k in AJUSTABLES},
+                    "limites": AJUSTABLES, "puede_editar": self.puede_editar()}
+
+        def do_POST(self):
+            ruta = urlparse(self.path).path
+            try:
+                largo = int(self.headers.get("Content-Length") or 0)
+                cuerpo = self.rfile.read(min(largo, 10000)) if largo else b""
+                if ruta != "/api/ajustes":
+                    return self.no_encontrado()
+                if not self.puede_editar():
+                    return self.json({"error": "solo_local"}, 403)
+                datos = json.loads(cuerpo or b"{}")
+                try:
+                    alm.cambiar_ajustes(None if datos.get("restablecer") else datos.get("valores"))
+                except ValueError as e:
+                    return self.json({"error": str(e)}, 400)
+                return self.json(self.info_ajustes())
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                try:
+                    self.json({"error": str(e)}, 500)
+                except Exception:
+                    pass
 
         def archivo(self, nombre):
             ruta = os.path.normpath(os.path.join(WEB, nombre))
@@ -510,7 +668,7 @@ def vigilar(alm, ruta):
                     copia = os.path.join(alm.carpeta, f"captura_{ahora:%Y%m%d_%H%M%S}.dem")
                     shutil.copy2(ruta, copia)
                     try:
-                        z, celda = at.cargar_terreno(copia, alm.cfg)
+                        z, celda = at.leer_dem_sarndbox(copia)
                     except Exception as e:
                         print(f"No pude leer la captura ({e}); espero la siguiente.")
                         alm.avisar("fallo", {"mensaje": "No se pudo leer la última captura del SARndbox."})
@@ -531,6 +689,8 @@ def main():
     ap.add_argument("--puerto", type=int, default=8000)
     ap.add_argument("--escala", type=float, help="metros de terreno por cm de arena")
     ap.add_argument("--sin-navegador", action="store_true")
+    ap.add_argument("--ajustes-remotos", action="store_true",
+                    help="dejar que otros equipos cambien escala y suelo (por defecto, solo esta computadora)")
     ap.add_argument("--historial", metavar="CARPETA", help="carpeta donde guardar las capturas (por defecto historial/)")
     ap.add_argument("--si", action="store_true")
     ap.add_argument("--no-instalar", action="store_true")
@@ -546,15 +706,16 @@ def main():
     if a.historial:
         carpeta = os.path.abspath(os.path.expanduser(a.historial))
     alm = Almacen(cfg, carpeta)
+    alm.ajustes_remotos = a.ajustes_remotos
+    cargar_ajustes_guardados(alm.cfg)
 
     if a.demo:
         alm.estado_fuente = "demo"
         print("Cargando capturas de ejemplo...")
         z_cm, c_cm = at.terreno_demo_cm()
         hora = dt.datetime.now() - dt.timedelta(minutes=3)
-        alm.agregar(*at.a_metros(z_cm, c_cm, cfg), "Demostración", None, hora, avisar=False)
-        alm.agregar(at.a_metros(at.terreno_demo_cm(deslave=True)[0], c_cm, cfg)[0], c_cm * cfg["metros_por_cm"],
-                    "Demostración", None, dt.datetime.now(), avisar=False)
+        alm.agregar(z_cm, c_cm, "Demostración", None, hora, avisar=False)
+        alm.agregar(at.terreno_demo_cm(deslave=True)[0], c_cm, "Demostración", None, dt.datetime.now(), avisar=False)
     else:
         print("Revisando historial...")
         alm.cargar_historial()

@@ -26,7 +26,7 @@ Lista paso a paso para el día de las pruebas. Marquen cada casilla `[ ]` → `[
 | V9 | Título de la ventana del SARndbox, y que xdotool la mueva al proyector y active F11 | `TITULO_VENTANA`, `METODO_PANTALLA_COMPLETA` | 3 |
 | V10 | Que la ventanita con la dirección y el navegador aparezcan en la pantalla principal y no en el proyector | `MOSTRAR_DIRECCION`, `ABRIR_NAVEGADOR` | 5 |
 | V11 | Que el ícono quede marcado como confiable (doble clic sin preguntas) | — | 2 |
-| V12 | Si la computadora aguanta el agua (velocidad, fluidez) | `AGUA_VELOCIDAD`, `AGUA_PASOS_MAXIMOS` | 3 |
+| V12 | Si la computadora aguanta el agua (velocidad, fluidez) | `CALIDAD_AGUA` (alta / media / ligera) | 3 |
 
 ---
 
@@ -145,7 +145,7 @@ Abran una Terminal. Copien cada comando, péguenlo con `Ctrl+Shift+V` y anoten e
   - Si se mueve pero no queda completa: hagan clic en la ventana y presionen `F11`. Prueben también `METODO_PANTALLA_COMPLETA="vrui"`.
 - [ ] **Calibración correcta:** los colores y curvas de nivel deben coincidir con la arena real, igual que antes. Si están corridos, la ventana no quedó exactamente en pantalla completa en el proyector. **No recalibren**: primero revisen V5 y V9.
 - [ ] **Agua:** pongan la mano abierta sobre la arena unos segundos: debe "llover" agua azul que corre hacia lo bajo. (En SARndbox 2.6 el agua está encendida mientras la velocidad sea mayor que 0; el lanzador usa `-ws 1.0 30`.)
-- [ ] **V12:** si el sandbox va muy lento con agua, prueben `AGUA_VELOCIDAD="0.5"` y `AGUA_PASOS_MAXIMOS="20"`. No pongan 0: sin agua no se puede guardar el relieve.
+- [ ] **V12:** empiecen con `CALIDAD_AGUA="media"`. Si el agua se ve fluida, prueben `"alta"`; si va trabada, `"ligera"`. Revisen también el registro en `logs/`: si dice "la simulación de agua no alcanza a ir en tiempo real", bajen un nivel. Confirmen que la tecla de guardar sigue funcionando con cada nivel (el relieve guardado tiene el tamaño de la malla del agua). Nunca pongan `AGUA_VELOCIDAD="0"`: sin agua no se puede guardar el relieve.
 
 ---
 
@@ -209,6 +209,7 @@ Anoten cuál funcionó: ______________________
   ```
 
   Tampoco debe salir nada.
+- [ ] En el panel, abran Configuración (botón del engrane): cambien a Español, cambien el tipo de suelo a "Arena suelta" y guarden. Los números deben cambiar en todos los dispositivos conectados. Desde un celular, la escala y el suelo deben verse bloqueados. Al final, pulsen "Volver a los valores normales" y guarden.
 - [ ] Vuelvan a abrir el ícono: debe arrancar normal (sin "ya está abierto" ni "puerto ocupado").
 - [ ] Con el sandbox abierto, hagan doble clic otra vez en el ícono: debe decir que **ya está abierto** y no abrir una segunda copia.
 
