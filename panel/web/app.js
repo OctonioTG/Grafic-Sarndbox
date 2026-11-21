@@ -3,7 +3,6 @@
 
 const $ = (s, el = document) => el.querySelector(s);
 const svgNS = "http://www.w3.org/2000/svg";
-
 // ============================== ESTADO ======================================
 const S = {
   capturas: [], urls: [], local: "", fuente: "",
@@ -128,6 +127,7 @@ async function refrescarLista() {
   pintarHistorial();
   $("#vacio").hidden = S.capturas.length > 0;
   $("#panel").hidden = S.capturas.length === 0;
+  $("#portada").hidden = S.capturas.length === 0;
   estadoNormal();
   return d;
 }
@@ -225,9 +225,9 @@ function pintarAlertas() {
   const a = [];
   const ico = `<svg viewBox="0 0 24 24"><path d="M12 3l10 18H2zM12 10v5M12 18v.5"/></svg>`;
   if (c && c.eventos && c.eventos.length)
-    a.push(`<div class="alerta">${ico}${c.eventos.length} deslave${c.eventos.length > 1 ? "s" : ""} detectado${c.eventos.length > 1 ? "s" : ""} <button data-ir="cambios">Ver</button></div>`);
+    a.push(`<div class="alerta">${ico}${c.eventos.length} deslave${c.eventos.length > 1 ? "s" : ""} detectado${c.eventos.length > 1 ? "s" : ""} <button data-ir="cambios">Ver en el mapa</button></div>`);
   if (m.kpis.inestable_sat_pct >= 1)
-    a.push(`<div class="alerta">${ico}${nf(m.kpis.inestable_sat_pct, 1)}% sería inestable con lluvia <button data-ir="riesgo_lluvia">Ver</button></div>`);
+    a.push(`<div class="alerta">${ico}${nf(m.kpis.inestable_sat_pct, 1)}% sería inestable con lluvia <button data-ir="riesgo_lluvia">Ver en el mapa</button></div>`);
   if (!a.length) a.push(`<div class="alerta ok"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg>Sin alertas</div>`);
   $("#alertas").innerHTML = a.join("");
   $("#alertas").querySelectorAll("[data-ir]").forEach(b => b.onclick = () => {
@@ -256,9 +256,23 @@ function pintarKpis(m) {
     ["Deslaves detectados", nDes == null ? "—" : nf(nDes),
       S.compararCon ? `desde la captura #${S.compararCon}` : "se necesita otra captura", nDes ? "var(--riesgo)" : null],
   ];
+  pintarFrase(k, nDes);
   $("#kpis").innerHTML = tarjetas.map(([et, val, sub, col]) => `
     <div class="kpi"><div class="kpi-et">${col ? `<i style="background:${col}"></i>` : ""}${et}</div>
     <div class="kpi-val">${val}</div><div class="kpi-sub">${sub}</div></div>`).join("");
+}
+
+// Resumen en una frase, en español sencillo, arriba de los números.
+function pintarFrase(k, nDes) {
+  const p = [];
+  if (k.inestable_sat_pct >= 0.1)
+    p.push(`Con lluvia, el <em class="r">${nf(k.inestable_sat_pct, 1)}%</em> del terreno se volvería inestable`
+      + (k.inestable_seco_pct < k.inestable_sat_pct ? `; en seco, solo el ${nf(k.inestable_seco_pct, 1)}%.` : "."));
+  else p.push("Las laderas se ven estables, incluso con lluvia.");
+  if (nDes > 0) p.push(`Se detect${nDes > 1 ? "aron" : "ó"} <em class="r">${nDes} deslave${nDes > 1 ? "s" : ""}</em> desde la captura #${S.compararCon}.`);
+  else if (nDes === 0) p.push(`Sin deslaves desde la captura #${S.compararCon}.`);
+  p.push(`Si los ríos crecen ${nf(k.nivel, 1)} m, se inundaría el <em class="a">${nf(k.inund_pct, 1)}%</em>.`);
+  $("#frase").innerHTML = p.join(" ");
 }
 
 // ============================== TABS Y LEYENDA ==============================

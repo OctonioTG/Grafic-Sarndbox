@@ -29,9 +29,19 @@
     </div>
   </header>
 
-  <div class="app">
-    <aside class="historial" aria-label="Historial de capturas">
-      <div class="historial-cab">
+  <!-- Franja morada: resumen, números principales y capturas -->
+  <section class="portada" id="portada" hidden>
+    <div class="portada-int">
+      <div class="cabecera">
+        <div class="cabecera-meta" id="cab-meta"></div>
+        <h1 id="cab-titulo">Captura</h1>
+        <p class="frase" id="frase"></p>
+        <div class="alertas" id="alertas"></div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+    </div>
+    <div class="tira" aria-label="Historial de capturas">
+      <div class="tira-cab">
         <h2>Capturas</h2>
         <label class="interruptor" title="Mostrar automáticamente cada captura nueva">
           <input type="checkbox" id="seguir" checked>
@@ -40,8 +50,10 @@
         </label>
       </div>
       <ol class="historial-lista" id="historial"></ol>
-    </aside>
+    </div>
+  </section>
 
+  <div class="app">
     <main class="contenido" id="contenido">
       <!-- Estado vacío -->
       <section class="vacio" id="vacio" hidden>
@@ -58,16 +70,6 @@
       </section>
 
       <div id="panel" hidden>
-        <div class="cabecera">
-          <div>
-            <div class="cabecera-meta" id="cab-meta"></div>
-            <h1 id="cab-titulo">Captura</h1>
-          </div>
-          <div class="alertas" id="alertas"></div>
-        </div>
-
-        <section class="kpis" id="kpis"></section>
-
         <!-- MAPA -->
         <section class="tarjeta mapa-tarjeta">
           <div class="mapa-zona">
@@ -106,6 +108,7 @@
         <div class="rejilla-2">
           <section class="tarjeta">
             <div class="tarjeta-cab"><h2>Perfil topográfico</h2><span class="sutil" id="perfil-sub"></span></div>
+            <p class="seccion-desc">Cómo se vería el terreno si lo cortaras a lo largo de la línea A–B del mapa.</p>
             <div class="grafica" id="g-perfil"></div>
             <div class="grafica-ley">
               <span><i style="background:var(--arena)"></i>Terreno</span>
@@ -115,6 +118,7 @@
           </section>
           <section class="tarjeta">
             <div class="tarjeta-cab"><h2>¿Cuánto se inunda?</h2><span class="sutil">si el agua sube sobre los ríos</span></div>
+            <p class="seccion-desc">Qué parte del terreno queda bajo el agua según cuánto suban los ríos. El punto marca lo que se ve en el mapa.</p>
             <div class="grafica" id="g-inund"></div>
           </section>
         </div>
@@ -122,10 +126,12 @@
         <div class="rejilla-2">
           <section class="tarjeta">
             <div class="tarjeta-cab"><h2>Estabilidad de laderas</h2><span class="sutil">% del terreno</span></div>
+            <p class="seccion-desc">Qué tan firme está el suelo de las laderas: en seco y empapado por la lluvia.</p>
             <div id="estabilidad"></div>
           </section>
           <section class="tarjeta">
             <div class="tarjeta-cab"><h2>Cuencas principales</h2><span class="sutil" id="cuencas-sub"></span></div>
+            <p class="seccion-desc">Zonas donde toda la lluvia escurre hacia el mismo río. Están ordenadas de mayor a menor.</p>
             <div id="cuencas"></div>
           </section>
         </div>
@@ -137,6 +143,7 @@
               <select id="comparar-con"></select>
             </label>
           </div>
+          <p class="seccion-desc">Qué arena se movió entre dos capturas y si el movimiento parece un deslave.</p>
           <div id="cambios"></div>
         </section>
 
